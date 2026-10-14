@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { effectiveEscalation, loadGuardConfig, resolveConfigPath, reviewerChain, type ConfigDeps } from "../../src/config.js"
+import configSchemaJson from "../../schemas/config.schema.json" with { type: "json" }
+import {
+  effectiveEscalation,
+  HOOK_DEADLINE_HARD_MAX_MS,
+  loadGuardConfig,
+  resolveConfigPath,
+  reviewerChain,
+  type ConfigDeps,
+} from "../../src/config.js"
 import { TEST_AUDIT_DIR, TEST_ROOT } from "../helpers.js"
 
 const ENV = { HOME: "/home/tester" }
@@ -266,9 +274,14 @@ describe("loadGuardConfig", () => {
       ).toBe("inactive")
     })
 
-    test("hookDeadlineMs ceiling raised to 25000 for operator chains", () => {
-      expect(loadGuardConfig(depsFor(validConfigText({ limits: limitsWith({ hookDeadlineMs: 25000, llmTimeoutMs: 6500 }) }))).status).toBe("active")
-      expect(loadGuardConfig(depsFor(validConfigText({ limits: limitsWith({ hookDeadlineMs: 25001, llmTimeoutMs: 6500 }) }))).status).toBe("inactive")
+    test("hookDeadlineMs ceiling is a hard cap not overridable by config", () => {
+      expect(loadGuardConfig(depsFor(validConfigText({ limits: limitsWith({ hookDeadlineMs: 120000, llmTimeoutMs: 6500 }) }))).status).toBe("active")
+      expect(loadGuardConfig(depsFor(validConfigText({ limits: limitsWith({ hookDeadlineMs: 120001, llmTimeoutMs: 6500 }) }))).status).toBe("inactive")
+    })
+
+    test("hookDeadlineMs hard ceiling stays in sync between schema and code", () => {
+      const schemaMax = (configSchemaJson.properties.limits as { properties: { hookDeadlineMs: { maximum: number } } }).properties.hookDeadlineMs.maximum
+      expect(schemaMax).toBe(HOOK_DEADLINE_HARD_MAX_MS)
     })
   })
 })

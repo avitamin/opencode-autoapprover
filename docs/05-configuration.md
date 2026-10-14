@@ -26,7 +26,7 @@ Runtime config guard: `${XDG_CONFIG_HOME:-$HOME/.config}/opencode-llm-approval/c
 | `policy.alwaysAskPathPrefixes` | Дополнительные workspace-relative literal paths; только ужесточают built-in exclusions |
 | `privacy.allowCommandTransmission` | Явное согласие на минимальный model payload; изначально false |
 | `privacy.destinationReview` | Операторская запись, какой endpoint/account/API-key provider проверен; не enforcement network pin |
-| `limits.*` | Hook/LLM deadline, размеры, частота, in-flight; значения не выше ceilings схемы |
+| `limits.*` | Hook/LLM deadline, размеры, частота, in-flight; значения не выше ceilings схемы. `hookDeadlineMs`: 1 000–120 000 мс, дефолт 8 000; 120 000 — зашитый абсолютный максимум схемы и кода, конфигом не перезаписывается |
 | `audit.directory` | Абсолютный локальный каталог вне workspace; 0700, JSONL files 0600 |
 | `audit.maxFileBytes`, `audit.retainedFiles` | Rotation: текущий + заданное максимальное общее число файлов |
 | `diagnostics.llmTrace.enabled` | Opt-in полный трейс LLM-оценок; отсутствие секции или `false` — трейса нет (поведение по умолчанию) |
@@ -67,7 +67,7 @@ Runtime config guard: `${XDG_CONFIG_HOME:-$HOME/.config}/opencode-llm-approval/c
 
 ## Семантическая валидация сверх JSON Schema
 
-`llmTimeoutMs < hookDeadlineMs`; оставить не меньше 500 мс для финальных проверок и аудита. При наличии `escalation`: все модели цепочки уникальны и отличаются от первичной; суммарный бюджет `llmTimeoutMs + N × timeoutMs` влезает в `hookDeadlineMs`; плейсхолдеры `REPLACE_ME` недопустимы и в моделях ступеней. Корни не равны `/`, home целиком или глобальным каталогам конфигурации; они существуют, не являются symlink и не пересекаются с каталогом аудита/установленным guard. Prefix exclusions не содержат `..`, wildcard или абсолютный путь. Строки `REPLACE_ME` означают незаполненный пример и operationally invalid.
+`llmTimeoutMs < hookDeadlineMs`; оставить не меньше 500 мс для финальных проверок и аудита. `hookDeadlineMs` ограничен зашитым максимумом 120 000 мс — он задан одновременно `maximum` в схеме и независимой проверкой в коде; превышение любого из них даёт `CONFIG_INVALID` (неактивный guard). При наличии `escalation`: все модели цепочки уникальны и отличаются от первичной; суммарный бюджет `llmTimeoutMs + N × timeoutMs` влезает в `hookDeadlineMs`; плейсхолдеры `REPLACE_ME` недопустимы и в моделях ступеней. Корни не равны `/`, home целиком или глобальным каталогам конфигурации; они существуют, не являются symlink и не пересекаются с каталогом аудита/установленным guard. Prefix exclusions не содержат `..`, wildcard или абсолютный путь. Строки `REPLACE_ME` означают незаполненный пример и operationally invalid.
 
 Для network-enabled shadow/auto оператор должен заполнить `destinationReview` и `allowCommandTransmission=true`. Это осознанное подтверждение доверенной конфигурации, не доказательство технической безопасности провайдера. Ключ хранится и используется штатным способом OpenCode. Плагин не определяет тарифные права по факту наличия ключа и не переключается между OAuth/подпиской/API автоматически.
 

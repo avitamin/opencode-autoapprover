@@ -107,8 +107,19 @@ export function reviewerChain(config: GuardConfig): readonly ModelRef[] {
   return [config.model, ...(config.escalation?.models ?? [])]
 }
 
+/**
+ * Hard ceiling for limits.hookDeadlineMs: mirrored by the JSON schema maximum,
+ * but enforced here as well so the code rejects any schema drift independently
+ * of the packaged schema (docs/01, docs/05). Config cannot override it.
+ */
+export const HOOK_DEADLINE_HARD_MAX_MS = 120_000
+
 function semanticValidation(config: GuardConfig, deps: ConfigDeps): SemanticFailure | null {
   const { limits, policy, audit, privacy, model } = config
+
+  if (limits.hookDeadlineMs > HOOK_DEADLINE_HARD_MAX_MS) {
+    return { message: `hookDeadlineMs must not exceed the hard ceiling of ${HOOK_DEADLINE_HARD_MAX_MS}ms` }
+  }
 
   if (limits.llmTimeoutMs + 500 > limits.hookDeadlineMs) {
     return { message: "llmTimeoutMs must leave >=500ms before hookDeadlineMs" }
