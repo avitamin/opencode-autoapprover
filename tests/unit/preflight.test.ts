@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test"
+import Ajv2020 from "ajv/dist/2020.js"
+import configSchemaJson from "../../schemas/config.schema.json" with { type: "json" }
+import reviewInputSchemaJson from "../../schemas/review-input.schema.json" with { type: "json" }
 import { commandTouchesSensitivePath, detectSecretLike, resourcesConsistentWithCommand, runPreflight } from "../../src/preflight.js"
 import { GUARD_CONFIG_DIRS, TEST_ROOT, makeConfig, makeEvent, makeSnapshot } from "../helpers.js"
 import type { ToolSnapshot } from "../../src/types.js"
@@ -22,6 +25,27 @@ describe("detectSecretLike", () => {
     expect(detectSecretLike("cd . && printf probe_cd")).toBe(false)
     expect(detectSecretLike("echo $AWS_SECRET_ACCESS_KEY")).toBe(false) // reference, not value
     expect(detectSecretLike("npm run build --token=short")).toBe(false)
+  })
+})
+
+describe("review DTO stays within schemas/review-input.schema.json (review finding, D8 sync)", () => {
+  test("DTO formed with 32 admitted resources conforms to the documented contract", () => {
+    // Before the sync this passed preflight (config ceiling 32) but violated the DTO schema (maxItems 8).
+    const files = Array.from({ length: 32 }, (_, i) => `f${i + 1}.md`)
+    const command = `cksum ${files.join(" ")}`
+    const limits = { ...config.limits, maxResources: 32 }
+    const result = runPreflight(makeSnapshot({ command }), makeEvent({ resources: files }), config.policy, limits, OPTS)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const validate = new Ajv2020({ strict: true, allErrors: true }).compile(reviewInputSchemaJson)
+    expect(validate(result.review)).toBe(true)
+  })
+
+  test("config maxResources ceiling stays in sync with the DTO resources maxItems", () => {
+    const configMax = (configSchemaJson.properties.limits as { properties: { maxResources: { maximum: number } } })
+      .properties.maxResources.maximum
+    const dtoMax = (reviewInputSchemaJson.properties.resources as { maxItems: number }).maxItems
+    expect(configMax).toBe(dtoMax)
   })
 })
 
