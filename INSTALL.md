@@ -21,7 +21,7 @@
 ```bash
 # в клоне репозитория (однократно):
 bun install
-bun run check          # typecheck + 349 offline-тестов + build; без сети и ключей
+bun run check          # typecheck + 395 offline-тестов + build; без сети и ключей
 
 # упаковка staged-копии вне рабочего дерева:
 bun run build
