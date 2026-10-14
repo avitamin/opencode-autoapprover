@@ -199,6 +199,7 @@ function snapshotFor(id: string, command: string, overrides: Partial<ToolSnapsho
     agent: "build",
     command,
     workdir: ROOT,
+    envelope: {},
     extraInputKeys: [],
     capturedAt: 1_000_000,
     ...overrides,

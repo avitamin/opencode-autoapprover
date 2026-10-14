@@ -71,8 +71,12 @@ describe("runPreflight", () => {
   })
 
   test("unknown tool input keys and empty resources make the request ineligible", () => {
-    expect(runPreflight(makeSnapshot({ extraInputKeys: ["env"] }), makeEvent(), config.policy, config.limits, OPTS)).toMatchObject({ ok: false, reason: "INPUT_MISMATCH" })
-    expect(runPreflight(makeSnapshot(), makeEvent({ resources: [] }), config.policy, config.limits, OPTS)).toMatchObject({ ok: false, reason: "INPUT_MISMATCH" })
+    expect(runPreflight(makeSnapshot({ extraInputKeys: ["env"] }), makeEvent(), config.policy, config.limits, OPTS)).toMatchObject({ ok: false, reason: "INPUT_MISMATCH", detail: "extraInputKeys" })
+    expect(runPreflight(makeSnapshot(), makeEvent({ resources: [] }), config.policy, config.limits, OPTS)).toMatchObject({ ok: false, reason: "INPUT_MISMATCH", detail: "resourcesEmpty" })
+  })
+
+  test("resources inconsistent with the full command report their detail", () => {
+    expect(runPreflight(makeSnapshot(), makeEvent({ resources: ["totally-different"] }), config.policy, config.limits, OPTS)).toMatchObject({ ok: false, reason: "INPUT_MISMATCH", detail: "resourcesInconsistent" })
   })
 
   test("size and control-character limits", () => {

@@ -7,6 +7,7 @@
 import type {
   GuardConfig,
   GuardLimits,
+  InputMismatchDetail,
   PermissionEventView,
   ReasonCode,
   ReviewInput,
@@ -21,7 +22,7 @@ export type PreflightFailureReason = Extract<
 
 export type PreflightResult =
   | { readonly ok: true; readonly review: ReviewInput }
-  | { readonly ok: false; readonly reason: PreflightFailureReason }
+  | { readonly ok: false; readonly reason: PreflightFailureReason; readonly detail?: InputMismatchDetail }
 
 export interface PreflightOptions {
   /** Effective cwd of the command: tool-input workdir or the location fallback. */
@@ -166,21 +167,20 @@ export function runPreflight(
   }
 
   // 2. Unknown tool-input keys can change shell/env/sandbox/execution (docs/03).
+  //    Documented envelope keys (timeout, background) were already bound by the
+  //    adapter; extraInputKeys here means keys outside that contract.
   if (snapshot.extraInputKeys.length > 0) {
-    return { ok: false, reason: "INPUT_MISMATCH" }
+    return { ok: false, reason: "INPUT_MISMATCH", detail: "extraInputKeys" }
   }
   if (snapshot.command.length === 0) {
     return { ok: false, reason: "INPUT_UNBOUND" }
   }
   // Scanner resources must be present and bound to the same operation.
   if (event.resources.length === 0) {
-    return { ok: false, reason: "INPUT_MISMATCH" }
+    return { ok: false, reason: "INPUT_MISMATCH", detail: "resourcesEmpty" }
   }
   if (!resourcesConsistentWithCommand(event.resources, snapshot.command)) {
-    return { ok: false, reason: "INPUT_MISMATCH" }
-  }
-  if (event.sessionID !== snapshot.sessionID) {
-    return { ok: false, reason: "INPUT_MISMATCH" }
+    return { ok: false, reason: "INPUT_MISMATCH", detail: "resourcesInconsistent" }
   }
 
   // 3. Size and control characters.

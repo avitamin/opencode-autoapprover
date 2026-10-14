@@ -121,6 +121,19 @@ describe("pure SDK mappers", () => {
     expect(toToolSnapshot(sdkBeforeEvent({ input: "not-an-object" }), 5)).toBeNull()
     expect(toToolSnapshot(sdkBeforeEvent({ input: { workdir: "/tmp" } }), 5)).toBeNull()
   })
+
+  test("documented envelope keys are captured, not flagged (D5, docs/03)", () => {
+    const withTimeout = toToolSnapshot(sdkBeforeEvent({ input: { command: "bun run check", workdir: TEST_ROOT, timeout: 300_000 } }), 5)
+    expect(withTimeout?.extraInputKeys).toEqual([])
+    expect(withTimeout?.envelope).toEqual({ timeout: 300_000 })
+    const withBackground = toToolSnapshot(sdkBeforeEvent({ input: { command: "make test-up", workdir: TEST_ROOT, timeout: 60_000, background: true } }), 5)
+    expect(withBackground?.extraInputKeys).toEqual([])
+    expect(withBackground?.envelope).toEqual({ timeout: 60_000, background: true })
+    // A contract-violating value type is treated as unknown input.
+    const badType = toToolSnapshot(sdkBeforeEvent({ input: { command: "ls", timeout: "300000" } }), 5)
+    expect(badType?.extraInputKeys).toEqual(["timeout"])
+    expect(badType?.envelope).toEqual({})
+  })
 })
 
 describe("wired guard end-to-end on the fake host surface", () => {
@@ -167,6 +180,37 @@ describe("wired guard end-to-end on the fake host surface", () => {
     await w.state.evaluate(event)
     expect(event.effect).toBe("allow")
     expect(w.reviewer.calls[0]?.command).toBe("cd . && printf probe_cd")
+  })
+
+  // Regression (D5): real harness commands from trace-2026-10-14.jsonl that
+  // carried documented envelope keys (timeout/background) and were wrongly
+  // stopped as INPUT_MISMATCH before the fix.
+  test("harness shell calls with envelope keys reach the reviewer (trace fixtures 14.10)", async () => {
+    const scripted = new ScriptedReviewer([ScriptedReviewer.text(CONFORMING_LOW), ScriptedReviewer.text(CONFORMING_LOW)])
+    const w = await wired({ makeReviewer: () => scripted })
+    await w.state.before(
+      sdkBeforeEvent({
+        input: { command: 'PATH="$HOME/.bun/bin:$PATH" bun run check 2>&1 | tail -4', workdir: TEST_ROOT, timeout: 300_000 },
+      }),
+    )
+    const check = sdkEvaluateEvent({ resources: ['PATH="$HOME/.bun/bin:$PATH" bun run check 2>&1', "tail -4"] })
+    await w.state.evaluate(check)
+    expect(check.effect).toBe("allow")
+
+    await w.state.before(
+      sdkBeforeEvent({
+        id: "call_2",
+        messageID: "msg_2",
+        input: { command: "docker rm -f cms-test-agent-1-db-host-1 && make test-up 2>&1 | tail -12", workdir: TEST_ROOT, background: true },
+      }),
+    )
+    const make = sdkEvaluateEvent({
+      source: { type: "tool", messageID: "msg_2", id: "call_2" },
+      resources: ["docker rm -f cms-test-agent-1-db-host-1", "make test-up", "tail -12"],
+    })
+    await w.state.evaluate(make)
+    expect(make.effect).toBe("allow")
+    expect(scripted.callCount).toBe(2)
   })
 
   test("execute.after releases the snapshot: repeated evaluate → DUPLICATE_EVENT/ask", async () => {

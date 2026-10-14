@@ -106,7 +106,24 @@ export function toPermissionEventView(event: SdkPermissionEventLike): Permission
   }
 }
 
-/** Narrow the unknown tool input; unknown keys make the request ineligible (docs/03). */
+/**
+ * Documented shell-tool input contract beyond {command, workdir} (docs/03,
+ * compatibility/host-contract.json fieldMapping): host-side execution envelope
+ * keys observed in the qualified host's shell tool schema. They cannot alter
+ * the transmitted command semantics; their values are captured into the
+ * snapshot envelope, bound by the fingerprint and never sent to the reviewer.
+ * A key present with a contract-violating value type is treated as unknown
+ * (→ INPUT_MISMATCH), as is any key outside this contract.
+ */
+const SHELL_ENVELOPE_INPUT_KEYS: Readonly<Record<string, "number" | "boolean" | "string">> = {
+  timeout: "number",
+  background: "boolean",
+}
+
+/**
+ * Narrow the unknown tool input (docs/03). Documented envelope keys with
+ * conforming types are bound; anything else makes the request ineligible.
+ */
 export function toToolSnapshot(event: SdkToolBeforeEventLike, capturedAt: number): ToolSnapshot | null {
   const input = event.input
   if (input === null || typeof input !== "object" || Array.isArray(input)) return null
@@ -114,7 +131,27 @@ export function toToolSnapshot(event: SdkToolBeforeEventLike, capturedAt: number
   const command = record["command"]
   if (typeof command !== "string") return null
   const workdir = record["workdir"]
-  const extraInputKeys = Object.keys(record).filter((key) => key !== "command" && key !== "workdir")
+  const knownKeys = new Set<string>(["command", "workdir", ...Object.keys(SHELL_ENVELOPE_INPUT_KEYS)])
+  const envelope: Record<string, string | number | boolean> = {}
+  const extraInputKeys: string[] = []
+  for (const [key, value] of Object.entries(record)) {
+    if (value === undefined) continue
+    if (!knownKeys.has(key)) {
+      extraInputKeys.push(key)
+      continue
+    }
+    const expectedType = SHELL_ENVELOPE_INPUT_KEYS[key]
+    if (expectedType === undefined) continue
+    if (
+      (typeof value !== "number" && typeof value !== "boolean" && typeof value !== "string") ||
+      typeof value !== expectedType
+    ) {
+      // Contract-violating value type: treat as unknown input (docs/03).
+      extraInputKeys.push(key)
+      continue
+    }
+    envelope[key] = value
+  }
   return {
     toolCallID: event.id,
     sessionID: event.sessionID,
@@ -122,6 +159,7 @@ export function toToolSnapshot(event: SdkToolBeforeEventLike, capturedAt: number
     agent: event.agent,
     command,
     workdir: typeof workdir === "string" ? workdir : null,
+    envelope,
     extraInputKeys,
     capturedAt,
   }

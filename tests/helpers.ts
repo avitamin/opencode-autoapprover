@@ -39,6 +39,7 @@ export function makeSnapshot(overrides: Partial<ToolSnapshot> = {}): ToolSnapsho
     agent: "build",
     command: "pwd",
     workdir: TEST_ROOT,
+    envelope: {},
     extraInputKeys: [],
     capturedAt: 1_000_000,
     ...overrides,

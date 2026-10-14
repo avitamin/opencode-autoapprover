@@ -107,6 +107,7 @@ function materialize(fixture: CommandFixture): {
     agent: "build",
     command,
     workdir: cwd,
+    envelope: {},
     extraInputKeys: ctx.env === "overridden" ? ["env"] : [],
     capturedAt: 1_000_000,
   }

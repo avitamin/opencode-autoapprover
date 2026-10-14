@@ -10,7 +10,7 @@ import type { TraceRecord } from "../../src/types.js"
 
 function record(id: number, timestamp: string, pad = ""): TraceRecord {
   return {
-    traceVersion: 3,
+    traceVersion: 4,
     timestamp,
     llmCalled: true,
     inputFingerprint: `fp_${id}`,
@@ -92,7 +92,7 @@ describe("FileTraceWriter", () => {
     const parsed = JSON.parse(content.trim()) as TraceRecord
     expect(parsed.inputFingerprint).toBe("fp_1")
     expect(parsed.command).toBe("echo 1 ")
-    expect(parsed.traceVersion).toBe(3)
+    expect(parsed.traceVersion).toBe(4)
   })
 
   test("records on different days land in different files", async () => {

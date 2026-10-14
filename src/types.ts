@@ -22,6 +22,9 @@ export type Signal =
   | "SCOPE_ESCAPE"
   | "OTHER"
 
+/** Trace-only diagnostic: which binding condition produced an INPUT_MISMATCH stop (docs/03, D5). */
+export type InputMismatchDetail = "extraInputKeys" | "resourcesEmpty" | "resourcesInconsistent"
+
 /** Reason codes — closed enumeration, mirrors schemas/audit.schema.json. */
 export type ReasonCode =
   | "RISK_WITHIN_THRESHOLD"
@@ -145,6 +148,14 @@ export type GuardConfigState =
   | { readonly status: "active"; readonly config: GuardConfig }
   | { readonly status: "inactive"; readonly reason: "CONFIG_INVALID"; readonly detail: string }
 
+/**
+ * Shell-tool envelope input values (docs/03, D5): documented host-contract keys
+ * beyond {command, workdir} — timeout, background. They only bound the host-side
+ * execution envelope and cannot alter the transmitted command semantics; their
+ * values are bound into the snapshot fingerprint and never sent to the reviewer.
+ */
+export type ToolEnvelope = Readonly<Record<string, string | number | boolean>>
+
 /** Complete immutable tool-input snapshot captured from the tool hook (docs/02: full input binding). */
 export interface ToolSnapshot {
   readonly toolCallID: string
@@ -154,9 +165,13 @@ export interface ToolSnapshot {
   /** Full raw command, compound forms included, never reconstructed from resources. */
   readonly command: string
   readonly workdir: string | null
+  /** Documented envelope keys with contract-conforming types (docs/03); bound by the fingerprint. */
+  readonly envelope: ToolEnvelope
   /**
-   * Unknown tool-input keys beyond {command, workdir}. Their presence can change
-   * shell/env/sandbox/execution → the request is not eligible (docs/03).
+   * Tool-input keys outside the documented shell-tool contract {command, workdir,
+   * timeout, background}, or envelope keys with a contract-violating value type.
+   * Their presence can change shell/env/sandbox/execution → the request is not
+   * eligible (docs/03).
    */
   readonly extraInputKeys: readonly string[]
   readonly capturedAt: number
@@ -248,13 +263,15 @@ export interface TraceAttempt {
  * top-level rawResponse/parseOk/assessment mirror the LAST attempt, model is
  * the deciding stage and llmLatencyMs is the sum over attempts. Pre-LLM
  * records (llmCalled: false) explain why an event never reached the reviewer:
- * preflight stops keep the raw command/resources, SECRET_DETECTED keeps only
- * the fingerprint, non-shell actions keep only the action name. Records are
- * written best-effort AFTER the outcome is known; a trace failure never
- * changes any effect. Default: disabled.
+ * preflight stops keep the raw command/resources unless the input is
+ * secret-looking (then only the fingerprint, on ANY stop reason); non-shell
+ * actions keep only the action name; INPUT_MISMATCH stops carry mismatchDetail
+ * naming the failed binding condition. Records are written best-effort AFTER
+ * the outcome is known; a trace failure never changes any effect. Default:
+ * disabled.
  */
 export interface TraceRecord {
-  readonly traceVersion: 3
+  readonly traceVersion: 4
   readonly timestamp: string
   /** False for pre-LLM stops: no reviewer call happened for this event. */
   readonly llmCalled: boolean
@@ -263,7 +280,7 @@ export interface TraceRecord {
   readonly model: ModelRef | null
   /** Permission action name ("shell" for the classified path, other names for skipped non-shell events). */
   readonly action: string
-  /** Raw command; null when unknown (non-shell events) or redacted (SECRET_DETECTED). */
+  /** Raw command; null when unknown (non-shell events) or redacted (secret-looking input). */
   readonly command: string | null
   readonly resources: readonly string[]
   /** Relative cwd sent to the reviewer; null for pre-LLM records (not computed). */
@@ -280,6 +297,8 @@ export interface TraceRecord {
   readonly attempts: readonly TraceAttempt[]
   readonly outcome: Outcome
   readonly reasonCode: ReasonCode
+  /** Present only on INPUT_MISMATCH stops: which binding condition failed (D5). */
+  readonly mismatchDetail?: InputMismatchDetail
   readonly totalLatencyMs: number
   readonly policyVersion: "graduated-v1"
 }

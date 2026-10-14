@@ -14,6 +14,7 @@
     "toolName": "event.tool === \"shell\" (ctx.tool.hook(\"execute.before\"))",
     "fullCommand": "tool.before event.input.command — ПОЛНАЯ raw-команда, включая compound; permission.resources НЕ являются полной командой (см. cdCompoundNoBypass)",
     "cwd": "tool.before event.input.workdir — присутствует, только когда агент задал его явно; иначе cwd = location directory",
+    "shellInputEnvelope": "input = {command, workdir?, timeout?, background?}; timeout:number / background:boolean захвачены в snapshot.envelope и связаны binding-fingerprint'ом (D5, 14.10.2026); ключи вне контракта или с нарушенным типом значения → INPUT_MISMATCH",
     "sessionID": "event.sessionID (ses_*)",
     "messageID": "event.source.messageID (msg_*)",
     "toolCallID": "event.source.id (call_*); совпадает с id tool_use-парта в стриме сессии",
@@ -62,6 +63,7 @@
     "Правила permissions: ПОСЛЕДНЕЕ совпавшее правило побеждает — широкие правила первыми, исключения после (V2 docs /permissions).",
     "Глобальные плагины хоста грузятся и в standalone; наблюдавшийся сторонний глобальный плагин permission-хуков не регистрировал; ctx.plugin.list() на v2.0.18 не отражает локальные плагины — composition-квалификация по логам загрузки.",
     "cd/prompt bypass (issue E9) на этой сборке/Linux НЕ наблюдён: evaluate вызывался для всех compound-команд.",
+    "D5 (14.10.2026): harness-тулколлы хоста несут envelope-ключи timeout/background; до D5 адаптер считал известными только {command, workdir} — хронические INPUT_MISMATCH в agent-сессиях при чистом standalone (живой evidence оператора 14.10). Контракт расширен по схеме shell-тула квалифицированного хоста v2.0.18; появление нового ключа хоста — видимый стоп до пересмотра контракта.",
     "Cleanup-функция setup() вызывается при завершении run (записи «unloaded»; M4-трейс: dispose при каждом завершении run).",
     "Драйвер run-сессий: без явного -m дефолтная модель может падать по лимитам аккаунта; с явным -m работает. Не полагаться на дефолтную модель в драйвере."
   ]

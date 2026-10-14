@@ -8,7 +8,7 @@
 import { createHash, randomUUID as nodeRandomUUID } from "node:crypto"
 import { parseAssessmentText } from "./assessment.js"
 import { DEFAULT_ESCALATION_TIMEOUT_MS, KILL_SWITCH_ENV, effectiveEscalation, reviewerChain } from "./config.js"
-import { runPreflight } from "./preflight.js"
+import { detectSecretLike, runPreflight } from "./preflight.js"
 import { mapAssessmentToThreshold } from "./threshold.js"
 import type {
   AdapterDirective,
@@ -18,6 +18,7 @@ import type {
   GuardConfig,
   GuardConfigState,
   GuardMode,
+  InputMismatchDetail,
   ModelRef,
   Outcome,
   PermissionEventView,
@@ -101,7 +102,7 @@ export class GuardController {
     }
     this.active.set(snapshot.toolCallID, {
       snapshot,
-      fingerprint: fingerprint(snapshot, this.deps.fingerprintSalt),
+      fingerprint: snapshotFingerprint(snapshot, this.deps.fingerprintSalt),
       phase: "captured",
       used: false,
       abort: null,
@@ -237,7 +238,7 @@ export class GuardController {
     if (trace === undefined || trace === null) return
     const last = input.attempts[input.attempts.length - 1]!
     const record: TraceRecord = {
-      traceVersion: 3,
+      traceVersion: 4,
       timestamp: this.deps.isoNow(),
       llmCalled: true,
       inputFingerprint: input.fingerprint,
@@ -273,10 +274,12 @@ export class GuardController {
   /**
    * Best-effort diagnostics trace for pre-LLM stops (docs/07): explains why an
    * event never reached the reviewer. Preflight stops keep the raw command and
-   * resources; SECRET_DETECTED keeps only the fingerprint — secret-looking
-   * input must not land in the trace file; non-shell actions keep only the
-   * action name (no snapshot exists for them). Same fire-and-forget contract
-   * as traceLlm: never awaited on the decision path, failures change nothing.
+   * resources — unless the input is secret-looking, which is redacted to the
+   * fingerprint on ANY stop reason (the secret prefilter only runs at gate 4,
+   * after binding/size stops, so the trace must not rely on the stop reason);
+   * non-shell actions keep only the action name (no snapshot exists for them).
+   * Same fire-and-forget contract as traceLlm: never awaited on the decision
+   * path, failures change nothing.
    */
   private traceStop(input: {
     readonly mode: GuardMode
@@ -288,19 +291,22 @@ export class GuardController {
     readonly start: number
     readonly outcome: Outcome
     readonly reason: ReasonCode
+    readonly mismatchDetail?: InputMismatchDetail
   }): void {
     const trace = this.deps.trace
     if (trace === undefined || trace === null) return
+    const secretLike =
+      input.command !== null && (detectSecretLike(input.command) || input.resources.some((resource) => detectSecretLike(resource)))
     const record: TraceRecord = {
-      traceVersion: 3,
+      traceVersion: 4,
       timestamp: this.deps.isoNow(),
       llmCalled: false,
       inputFingerprint: input.fingerprint,
       mode: input.mode,
       model: input.model,
       action: input.action,
-      command: input.command,
-      resources: input.resources,
+      command: secretLike ? null : input.command,
+      resources: secretLike ? [] : input.resources,
       cwdRelative: null,
       workspaceLabel: null,
       promptSha256: this.deps.promptSha256 ?? null,
@@ -312,11 +318,12 @@ export class GuardController {
       attempts: [],
       outcome: input.outcome,
       reasonCode: input.reason,
+      ...(input.mismatchDetail !== undefined ? { mismatchDetail: input.mismatchDetail } : {}),
       totalLatencyMs: Math.max(0, this.deps.clock() - input.start),
       policyVersion: "graduated-v1",
     }
     if (process.env.OPENCODE_LLM_APPROVAL_DEBUG === "1") {
-      console.error(`[llm-approval] trace stop: ${record.action}/${record.outcome}/${record.reasonCode}`)
+      console.error(`[llm-approval] trace stop: ${record.action}/${record.outcome}/${record.reasonCode}${record.mismatchDetail !== undefined ? `/${record.mismatchDetail}` : ""}`)
     }
     void trace.append(record).catch((error) => {
       if (process.env.OPENCODE_LLM_APPROVAL_DEBUG === "1") {
@@ -428,18 +435,19 @@ export class GuardController {
       entry.phase = "done"
       this.active.delete(key)
       this.rememberTombstone(key)
-      // SECRET_DETECTED input is redacted to the fingerprint: secret-looking text must not reach the trace file.
-      const redactSecret = preflight.reason === "SECRET_DETECTED"
+      // traceStop itself redacts secret-looking input to the fingerprint: the
+      // secret prefilter (gate 4) has not run yet for binding/size stops.
       this.traceStop({
         mode: config.mode,
         model: config.model,
         fingerprint: entry.fingerprint,
         action: "shell",
-        command: redactSecret ? null : entry.snapshot.command,
-        resources: redactSecret ? [] : event.resources,
+        command: entry.snapshot.command,
+        resources: event.resources,
         start,
         outcome: "ask",
         reason: preflight.reason,
+        ...(preflight.detail !== undefined ? { mismatchDetail: preflight.detail } : {}),
       })
       this.auditBestEffort(config.mode, "ask", preflight.reason, start, null, entry.fingerprint)
       return UNCHANGED
@@ -720,13 +728,24 @@ type ReviewerCallResult =
 
 const UNCHANGED: AdapterDirective = { commit: "unchanged" }
 
-function fingerprint(snapshot: ToolSnapshot, salt: string): string {
+/**
+ * Binding fingerprint of a captured snapshot (docs/03): hashes the correlation
+ * ids, the full command, the workdir and every documented envelope value, so
+ * the guard stays bound to the COMPLETE captured input (D5). Salted per
+ * process; only the digest is ever written to audit/trace.
+ */
+export function snapshotFingerprint(snapshot: ToolSnapshot, salt: string): string {
+  const envelope: Record<string, string | number | boolean> = {}
+  for (const key of Object.keys(snapshot.envelope).sort()) {
+    envelope[key] = snapshot.envelope[key]!
+  }
   const canonical = JSON.stringify({
     toolCallID: snapshot.toolCallID,
     sessionID: snapshot.sessionID,
     messageID: snapshot.messageID,
     command: snapshot.command,
     workdir: snapshot.workdir,
+    envelope,
   })
   return createHash("sha256").update(`${salt}:${canonical}`).digest("hex")
 }

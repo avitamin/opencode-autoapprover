@@ -65,7 +65,7 @@
 
 | Файл | Назначение |
 |---|---|
-| [package.json](package.json) | Пакет `opencode-llm-approval` v2.2.0, scripts `typecheck/test/build/check/test:contract/test:live`. |
+| [package.json](package.json) | Пакет `opencode-llm-approval` v2.3.0, scripts `typecheck/test/build/check/test:contract/test:live`. |
 | [tsconfig.json](tsconfig.json) | Strict TS для src+tests (noUncheckedIndexedAccess, exactOptionalPropertyTypes, verbatimModuleSyntax). |
 | [tsconfig.build.json](tsconfig.build.json) | Emit `dist/` для упаковки. |
 | [bun.lock](bun.lock) | Точные версии зависимостей (282 пакета). |
@@ -86,13 +86,14 @@
 | [tests/unit/json.test.ts](tests/unit/json.test.ts) | 10 strict-JSON случаев. |
 | [tests/unit/config.test.ts](tests/unit/config.test.ts) | Валидация конфига: schema, семантика, freeze, inactive; секция `escalation` — дефолты, уникальность, бюджет цепочки, потолок hookDeadline (D3). |
 | [tests/unit/threshold.test.ts](tests/unit/threshold.test.ts) | Порог + matrix L51–L54 + структурные потолки. |
-| [tests/unit/preflight.test.ts](tests/unit/preflight.test.ts) | Все gates; compound-команды не локальный стоп. |
+| [tests/unit/preflight.test.ts](tests/unit/preflight.test.ts) | Все gates; compound-команды не локальный стоп; detail-причины INPUT_MISMATCH (D5). |
+| [tests/unit/fingerprint.test.ts](tests/unit/fingerprint.test.ts) | Binding-fingerprint: envelope-значения в дайджесте, независимость от порядка ключей (D5). |
 | [tests/unit/assessment.test.ts](tests/unit/assessment.test.ts) | Syntax/Schema/Coherence; fences/prose/duplicates → ask. |
 | [tests/contract/controller.test.ts](tests/contract/controller.test.ts) | 27 сценариев: admission, binding, дубликаты, лимиты, таймауты, commit-семантика, hygiene аудита. |
 | [tests/contract/escalation.test.ts](tests/contract/escalation.test.ts) | Эскалационная цепочка (D3): триггеры UNKNOWN/невалидный ответ/LOW confidence, исчерпание, без эскалации на конкретный вердикт/transport/timeout, бюджет ступени, лимиты на событие, audit/trace попыток. |
-| [tests/contract/adapter.test.ts](tests/contract/adapter.test.ts) | SDK-маппинг, untouchable effects, dispose, полная цепочка на fake host surface. |
+| [tests/contract/adapter.test.ts](tests/contract/adapter.test.ts) | SDK-маппинг, untouchable effects, dispose, полная цепочка на fake host surface; envelope-контракт timeout/background + живые фикстуры трейса 14.10 (D5). |
 | [tests/contract/generate-wiring.test.ts](tests/contract/generate-wiring.test.ts) | E2e native reviewer через реальную проводку: allow/INVALID_RESPONSE, модельный гейт, TIMEOUT, 429→RATE_LIMIT, отсутствие промпта. |
-| [tests/contract/trace.test.ts](tests/contract/trace.test.ts) | Lifecycle трейса: полная I/O-пара на каждом post-LLM исходе; pre-LLM стопы — команда/redaction/тонкие записи; отказ трейса не меняет решение (D1, D2). |
+| [tests/contract/trace.test.ts](tests/contract/trace.test.ts) | Lifecycle трейса: полная I/O-пара на каждом post-LLM исходе; pre-LLM стопы — команда/redaction/тонкие записи; редакция секретоподобного входа на любом стопе + mismatchDetail (D1, D2, D5). |
 | [tests/unit/generate-reviewer.test.ts](tests/unit/generate-reviewer.test.ts) | Сборка промпта (untrusted-хвост), один вызов, abort до/после, классификация ошибок. |
 | [tests/unit/audit.test.ts](tests/unit/audit.test.ts) | Сериализация appends, size-based ротация с retention, отказы append/rotate/healthy. |
 | [tests/unit/trace.test.ts](tests/unit/trace.test.ts) | Трейс-writer: дневное разбиение, ротация, retention, отказы, изоляция от audit-файлов (D1). |

@@ -155,7 +155,7 @@ describe("escalation chain triggers", () => {
     expect(h.audit.records[0]?.attemptCount).toBe(2)
     expect(h.audit.records[0]?.model).toEqual(HIGH)
     const record = h.trace.records[0]!
-    expect(record.traceVersion).toBe(3)
+    expect(record.traceVersion).toBe(4)
     expect(record.escalated).toBe(true)
     expect(record.model).toEqual(HIGH)
     expect(record.attempts.length).toBe(2)
