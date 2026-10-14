@@ -21,20 +21,20 @@
 ```bash
 # в клоне репозитория (однократно):
 bun install
-bun run check          # typecheck + 415 offline-тестов + build; без сети и ключей
+bun run check          # typecheck + 416 offline-тестов + build; без сети и ключей
 
 # упаковка staged-копии вне рабочего дерева:
 bun run build
-bun scripts/make-package.ts --stage ~/.local/share/opencode-llm-approval-v2.6.0
-cd ~/.local/share/opencode-llm-approval-v2.6.0/opencode-llm-approval
+bun scripts/make-package.ts --stage ~/.local/share/opencode-llm-approval-v2.7.0
+cd ~/.local/share/opencode-llm-approval-v2.7.0/opencode-llm-approval
 bun install --production
 ```
 
 Упаковщик принимает только новый или пустой staged-каталог и не перезаписывает прежнюю сборку. При обновлении установленной копии сначала сравнивайте состав пакетов (старый dist + новый конфиг с новыми секциями → `CONFIG_INVALID` → все ask — обновляйте dist и конфиг вместе; протоколы обновлений — локальный evidence оператора).
 
-Место установки по умолчанию — домашняя директория пользователя (`~/.local/share/`, XDG): вне редактируемого агентом рабочего дерева и вне исчезающего `/tmp`. Версионный корень (`…-v2.6.0`) позволяет держать предыдущую сборку для отката (п. 5.4).
+Место установки по умолчанию — домашняя директория пользователя (`~/.local/share/`, XDG): вне редактируемого агентом рабочего дерева и вне исчезающего `/tmp`. Версионный корень (`…-v2.7.0`) позволяет держать предыдущую сборку для отката (п. 5.4).
 
-Структура staged-пакета: `dist/` (скомпилированный JS), `prompts/reviewer-system.txt`, `index.ts` (entry-шим; host-факт: `plugins:[<dir>]` резолвит `<dir>/index.ts` и игнорирует `package.json main`), prod-`node_modules/`. Каталог дальше по тексту — `$PKG = ~/.local/share/opencode-llm-approval-v2.6.0/opencode-llm-approval`. В bash `~` разворачивается шеллом; в `opencode.json` (`plugins`) путь писать **абсолютным** (`/home/<user>/…`) — проверенные прогоны шли с абсолютным путём, разворачивание `~` в JSON-конфиге хостом не проверялось.
+Структура staged-пакета: `dist/` (скомпилированный JS), `prompts/reviewer-system.txt`, `index.ts` (entry-шим; host-факт: `plugins:[<dir>]` резолвит `<dir>/index.ts` и игнорирует `package.json main`), prod-`node_modules/`. Каталог дальше по тексту — `$PKG = ~/.local/share/opencode-llm-approval-v2.7.0/opencode-llm-approval`. В bash `~` разворачивается шеллом; в `opencode.json` (`plugins`) путь писать **абсолютным** (`/home/<user>/…`) — проверенные прогоны шли с абсолютным путём, разворачивание `~` в JSON-конфиге хостом не проверялось.
 
 ## 3. Guard-конфиг (глобальный, доверенный)
 
@@ -46,7 +46,7 @@ bun install --production
 - **policy.workspaceRoots** — корни, внутри которых guard работает вообще (cwd вне корня → ask без LLM).
 - **policy.alwaysAskPathPrefixes** — чувствительные префиксы путей (локальный стоп до LLM).
 - **privacy.allowCommandTransmission** — согласие на передачу текста команды модели. `false` = guard работает, но любая оценка заканчивается `PRIVACY_BLOCKED` → ask. В `shadow`/`auto` должно быть осознанное `true`; `destinationReview` — ваша запись, куда и на какой аккаунт уходит payload.
-- **limits**: `hookDeadlineMs` 8000 (настраивается в 1000–120000; 120000 — зашитый максимум схемы и кода, конфигом не перезаписывается); `llmTimeoutMs` — потолок 30000 (дефолт 6500), закладывайте с запасом по латентности вашего провайдера (живые замеры оператора — локальный evidence) либо выбирайте более быструю модель ревьюера; бюджет цепочки `llmTimeoutMs + N × escalation.timeoutMs` обязан влезать в `hookDeadlineMs`; каждый TIMEOUT заканчивается безопасным `ask`.
+- **limits**: `hookDeadlineMs` 8000 (настраивается в 1000–120000; 120000 — зашитый максимум схемы и кода, конфигом не перезаписывается); `llmTimeoutMs` — потолок 30000 (дефолт 6500), закладывайте с запасом по латентности вашего провайдера (живые замеры оператора — локальный evidence) либо выбирайте более быструю модель ревьюера; `maxResources` — потолок 32 (дефолт 8): поднимайте, если безвредные команды с многими путями (git с pathspec, составные) стопятся `PAYLOAD_TOO_LARGE`; бюджет цепочки `llmTimeoutMs + N × escalation.timeoutMs` обязан влезать в `hookDeadlineMs`; каждый TIMEOUT заканчивается безопасным `ask`.
 - **audit.directory** — каталог вне рабочих деревьев; ошибка записи аудита → `ask` (автоапрув без аудита невозможен).
 
 ### 3.1. Ручное переключение режима через Visual Studio Code

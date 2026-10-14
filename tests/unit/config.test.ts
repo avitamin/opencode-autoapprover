@@ -306,6 +306,11 @@ describe("loadGuardConfig", () => {
       }
     })
 
+    test("D8: maxResources ceiling is 32", () => {
+      expect(loadGuardConfig(depsFor(validConfigText({ limits: limitsWith({ maxResources: 32 }) }))).status).toBe("active")
+      expect(loadGuardConfig(depsFor(validConfigText({ limits: limitsWith({ maxResources: 33 }) }))).status).toBe("inactive")
+    })
+
     test("hookDeadlineMs ceiling is a hard cap not overridable by config", () => {
       expect(loadGuardConfig(depsFor(validConfigText({ limits: limitsWith({ hookDeadlineMs: 120000, llmTimeoutMs: 6500 }) }))).status).toBe("active")
       expect(loadGuardConfig(depsFor(validConfigText({ limits: limitsWith({ hookDeadlineMs: 120001, llmTimeoutMs: 6500 }) }))).status).toBe("inactive")

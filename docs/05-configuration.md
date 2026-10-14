@@ -27,7 +27,7 @@ Runtime config guard: `${XDG_CONFIG_HOME:-$HOME/.config}/opencode-llm-approval/c
 | `policy.alwaysAskPathPrefixes` | Дополнительные workspace-relative literal paths; только ужесточают built-in exclusions |
 | `privacy.allowCommandTransmission` | Явное согласие на минимальный model payload; изначально false |
 | `privacy.destinationReview` | Операторская запись, какой endpoint/account/API-key provider проверен; не enforcement network pin |
-| `limits.*` | Hook/LLM deadline, размеры, частота, in-flight; значения не выше ceilings схемы. `hookDeadlineMs`: 1 000–120 000 мс, дефолт 8 000; 120 000 — зашитый абсолютный максимум схемы и кода, конфигом не перезаписывается. `llmTimeoutMs`: 500–30 000 мс, дефолт 6 500; бюджет цепочки обязан влезать в hook-бюджет |
+| `limits.*` | Hook/LLM deadline, размеры, частота, in-flight; значения не выше ceilings схемы. `hookDeadlineMs`: 1 000–120 000 мс, дефолт 8 000; 120 000 — зашитый абсолютный максимум схемы и кода, конфигом не перезаписывается. `llmTimeoutMs`: 500–30 000 мс, дефолт 6 500; бюджет цепочки обязан влезать в hook-бюджет. `maxResources`: 1–32, дефолт 8 (объём передаваемого контекста дополнительно клэмпится `maxPayloadBytes`) |
 | `audit.directory` | Абсолютный локальный каталог вне workspace; 0700, JSONL files 0600 |
 | `audit.maxFileBytes`, `audit.retainedFiles` | Rotation: текущий + заданное максимальное общее число файлов |
 | `diagnostics.llmTrace.enabled` | Opt-in полный трейс LLM-оценок; отсутствие секции или `false` — трейса нет (поведение по умолчанию) |
