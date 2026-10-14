@@ -35,7 +35,7 @@
     "destinationReview": "REPLACE_ME: проверьте endpoint, API-key account и допустимость передачи данных."
   },
   "limits": {
-    "hookDeadlineMs": 8000,
+    "hookDeadlineMs": 20000,
     "llmTimeoutMs": 6500,
     "maxInFlight": 2,
     "maxAssessmentsPerMinute": 20,

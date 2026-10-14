@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
 import configSchemaJson from "../../schemas/config.schema.json" with { type: "json" }
 import {
   effectiveEscalation,
@@ -303,6 +304,26 @@ describe("loadGuardConfig", () => {
       expect(state.status).toBe("active")
       if (state.status === "active") {
         expect(effectiveEscalation(state.config)?.allowedCategories).toEqual(["READ", "EXEC"])
+      }
+    })
+
+    test("guard.auto.json example stays semantically valid after placeholder substitution", () => {
+      // Review finding: the escalation section (timeoutMs 9000) plus llmTimeoutMs 6500
+      // needs a 15500ms chain budget — the template's hookDeadlineMs must cover it,
+      // otherwise a filled-in example dies with CONFIG_INVALID instead of going active.
+      const raw = readFileSync("examples/guard.auto.json", "utf8")
+      const filled = raw
+        .replaceAll("REPLACE_ME_ESCALATION_PROVIDER_ID", "example-provider-2")
+        .replaceAll("REPLACE_ME_ESCALATION_MODEL_ID", "example-model-2")
+        .replaceAll("REPLACE_ME_PROVIDER_ID", "example-provider")
+        .replaceAll("REPLACE_ME_MODEL_ID", "example-model")
+        .replaceAll("/home/REPLACE_ME_USER/projects/REPLACE_ME_PROJECT", TEST_ROOT)
+        .replaceAll("/home/REPLACE_ME_USER/.local/state/opencode-llm-approval", TEST_AUDIT_DIR)
+        .replaceAll("REPLACE_ME", "reviewed")
+      const state = loadGuardConfig(depsFor(filled))
+      expect(state.status).toBe("active")
+      if (state.status === "active") {
+        expect(state.config.escalation?.allowedCategories).toEqual(["READ", "EXEC"])
       }
     })
 
