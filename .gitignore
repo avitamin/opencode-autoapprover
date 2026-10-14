@@ -1,0 +1,19 @@
+node_modules/
+dist/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+.audit/
+.local/
+artifacts/
+# Локальное IDE-состояние (пути машины, account UUID, телеметрия).
+.idea/
+*.tgz
+*.zip
+# Не коммитить реальные runtime settings и приватные traces.
+config.local.json
+host-traces.local.jsonl
+# Локальная документация оператора: evidence-протоколы стенда и журнал — не публикуются.
+local/

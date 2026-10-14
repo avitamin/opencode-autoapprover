@@ -1,0 +1,24 @@
+{
+  "name": "opencode-llm-approval",
+  "version": "2.1.0",
+  "description": "OpenCode V2 permission plugin: graduated LLM risk assessment of shell commands with a deterministic operator threshold. ask-to-allow only, no auto-deny, shadow-first.",
+  "type": "module",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "scripts": {
+    "typecheck": "node node_modules/typescript/lib/tsc.js --noEmit",
+    "test": "bun test tests/unit tests/contract tests/corpus",
+    "build": "node node_modules/typescript/lib/tsc.js -p tsconfig.build.json",
+    "check": "bun run typecheck && bun run test && bun run build",
+    "test:contract": "bun test tests/contract tests/corpus",
+    "test:live": "echo 'live model evaluation requires explicit operator consent (docs/08-testing.md); intentionally not part of check' && exit 1"
+  },
+  "dependencies": {
+    "@opencode/plugin": "2.0.18",
+    "ajv": "8.20.0"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "typescript": "7.0.2"
+  }
+}
