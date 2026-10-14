@@ -80,6 +80,21 @@
           "minimum": 500,
           "maximum": 30000,
           "default": 9000
+        },
+        "allowedCategories": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "READ",
+              "WRITE",
+              "EXEC",
+              "NETWORK",
+              "STATE_CHANGE"
+            ]
+          }
         }
       },
       "required": [

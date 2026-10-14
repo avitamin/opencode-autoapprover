@@ -8,6 +8,7 @@
 import { createHash, randomUUID as nodeRandomUUID } from "node:crypto"
 import { parseAssessmentText } from "./assessment.js"
 import { DEFAULT_ESCALATION_TIMEOUT_MS, KILL_SWITCH_ENV, effectiveEscalation, reviewerChain } from "./config.js"
+import type { EffectiveEscalation } from "./config.js"
 import { detectSecretLike, runPreflight } from "./preflight.js"
 import { mapAssessmentToThreshold } from "./threshold.js"
 import type {
@@ -15,6 +16,7 @@ import type {
   Assessment,
   AuditPort,
   AuditRecord,
+  AutoAllowPolicy,
   GuardConfig,
   GuardConfigState,
   GuardMode,
@@ -36,6 +38,21 @@ const ENTRY_TTL_MS = 60_000
 const RATE_WINDOW_MS = 60_000
 /** An escalation stage is started only when the remaining hook budget leaves it a meaningful slice (docs/07). */
 const MIN_STAGE_BUDGET_MS = 1_000
+
+/**
+ * D7: a verdict is authorized against the category allowlist of the stage that
+ * produced it — an escalation-stage verdict may carry the extended
+ * escalation.allowedCategories set, the primary only the global one (docs/04).
+ * With no escalation, or the default inherited set, this is the global policy.
+ */
+function stagePolicy(config: GuardConfig, escalation: EffectiveEscalation | null, stage: number): AutoAllowPolicy {
+  if (stage === 0 || escalation === null) return config.policy.autoAllow
+  return {
+    maxRisk: config.policy.autoAllow.maxRisk,
+    minConfidence: config.policy.autoAllow.minConfidence,
+    allowedCategories: escalation.allowedCategories,
+  }
+}
 
 export interface ControllerDeps {
   readonly config: GuardConfigState
@@ -482,6 +499,8 @@ export class GuardController {
       let stopReason: ReasonCode = "INTERNAL_ERROR"
       // Set when a stage produced a conclusive verdict — the only path that may leave ask.
       let conclusive: { readonly text: string; readonly assessment: Assessment } | null = null
+      // D7: the final verdict is judged by the producing stage's own category set.
+      let conclusiveStage = 0
 
       for (let stage = 0; stage < chain.length; stage++) {
         const model = chain[stage]!
@@ -529,13 +548,24 @@ export class GuardController {
           escalation !== null &&
           ((assessment.risk === "UNKNOWN" && escalation.triggerOn.unknownRisk) ||
             (assessment.confidence === "LOW" && escalation.triggerOn.lowConfidence))
-        if (!inconclusive) {
+        // D7: a stage-0 verdict that fails only the global category set — and would fully
+        // pass the escalation one — is deferred to the next chain model: extra categories
+        // may be auto-allowed only by an escalation-stage verdict. Risk/confidence failures
+        // never defer; the threshold already rejected the verdict on a stricter axis.
+        const deferredByCategory =
+          stage === 0 &&
+          escalation !== null &&
+          !inconclusive &&
+          mapAssessmentToThreshold(assessment, config.policy.autoAllow).reason === "CATEGORY_NOT_ALLOWED" &&
+          mapAssessmentToThreshold(assessment, stagePolicy(config, escalation, 1)).withinThreshold
+        if (!inconclusive && !deferredByCategory) {
           conclusive = { text: result.text, assessment }
+          conclusiveStage = stage
           break
         }
         if (this.nextStageAllowed(stage, chain, generation, deadlineAt)) continue
-        // Chain exhausted or out of budget: same deterministic mapping as a single-stage event.
-        stopReason = mapAssessmentToThreshold(assessment, config.policy.autoAllow).reason
+        // Chain exhausted or out of budget: judged by the producing stage's own set.
+        stopReason = mapAssessmentToThreshold(assessment, stagePolicy(config, escalation, stage)).reason
         break
       }
 
@@ -560,7 +590,7 @@ export class GuardController {
         this.auditBestEffort(config.mode, "ask", stopReason, start, finalModel, entry.fingerprint, attemptCount)
         return UNCHANGED
       }
-      const threshold = mapAssessmentToThreshold(conclusive.assessment, config.policy.autoAllow)
+      const threshold = mapAssessmentToThreshold(conclusive.assessment, stagePolicy(config, escalation, conclusiveStage))
       if (!threshold.withinThreshold) {
         this.traceLlm({
           config,

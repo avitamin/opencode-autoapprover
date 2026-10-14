@@ -215,6 +215,8 @@ describe("loadGuardConfig", () => {
         const escalation = effectiveEscalation(state.config)
         expect(escalation?.triggerOn).toEqual({ unknownRisk: true, invalidResponse: true, lowConfidence: true })
         expect(escalation?.timeoutMs).toBe(9000)
+        // D7: absent allowedCategories → the global autoAllow set is inherited.
+        expect(escalation?.allowedCategories).toEqual(["READ"])
         expect(reviewerChain(state.config)).toHaveLength(2)
         expect(Object.isFrozen(state.config.escalation)).toBe(true)
       }
@@ -285,6 +287,23 @@ describe("loadGuardConfig", () => {
           depsFor(validConfigText({ escalation: { models: [{ providerID: "REPLACE_ME", id: "x" }] }, limits: limitsWith({ hookDeadlineMs: 20000 }) })),
         ).status,
       ).toBe("inactive")
+    })
+
+    test("D7: escalation.allowedCategories superset rule and resolution", () => {
+      // Global set is ["READ"]; dropping it from the escalation set → semantic violation.
+      expect(
+        loadGuardConfig(depsFor(validConfigText({ escalation: { models: [HIGH_MODEL], allowedCategories: ["EXEC"] }, limits: limitsWith({ hookDeadlineMs: 20000 }) }))).status,
+      ).toBe("inactive")
+      // Schema enum: UNKNOWN is structurally not an allowlable category.
+      expect(
+        loadGuardConfig(depsFor(validConfigText({ escalation: { models: [HIGH_MODEL], allowedCategories: ["READ", "UNKNOWN"] }, limits: limitsWith({ hookDeadlineMs: 20000 }) }))).status,
+      ).toBe("inactive")
+      // A proper superset resolves to the escalation set.
+      const state = loadGuardConfig(depsFor(validConfigText({ escalation: { models: [HIGH_MODEL], allowedCategories: ["READ", "EXEC"] }, limits: limitsWith({ hookDeadlineMs: 20000 }) })))
+      expect(state.status).toBe("active")
+      if (state.status === "active") {
+        expect(effectiveEscalation(state.config)?.allowedCategories).toEqual(["READ", "EXEC"])
+      }
     })
 
     test("hookDeadlineMs ceiling is a hard cap not overridable by config", () => {

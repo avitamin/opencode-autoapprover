@@ -6,7 +6,7 @@
 import Ajv2020 from "ajv/dist/2020.js"
 import configSchemaJson from "../schemas/config.schema.json" with { type: "json" }
 import { parseStrictJson } from "./json.js"
-import type { GuardConfig, GuardConfigState, ModelRef } from "./types.js"
+import type { AllowedCategory, GuardConfig, GuardConfigState, ModelRef } from "./types.js"
 
 export interface PathStat {
   readonly isDirectory: boolean
@@ -82,6 +82,8 @@ export interface EffectiveEscalation {
   readonly models: readonly ModelRef[]
   readonly triggerOn: { readonly unknownRisk: boolean; readonly invalidResponse: boolean; readonly lowConfidence: boolean }
   readonly timeoutMs: number
+  /** D7: categories an escalation-stage verdict may carry; defaults to the global autoAllow set. */
+  readonly allowedCategories: readonly AllowedCategory[]
 }
 
 export const DEFAULT_ESCALATION_TIMEOUT_MS = 9000
@@ -99,6 +101,7 @@ export function effectiveEscalation(config: GuardConfig): EffectiveEscalation | 
       lowConfidence: triggerOn.lowConfidence ?? true,
     },
     timeoutMs: escalation.timeoutMs ?? DEFAULT_ESCALATION_TIMEOUT_MS,
+    allowedCategories: escalation.allowedCategories ?? config.policy.autoAllow.allowedCategories,
   }
 }
 
@@ -146,6 +149,17 @@ function semanticValidation(config: GuardConfig, deps: ConfigDeps): SemanticFail
     const chainBudgetMs = limits.llmTimeoutMs + escalation.models.length * escalation.timeoutMs
     if (chainBudgetMs > limits.hookDeadlineMs) {
       return { message: `llmTimeoutMs + escalation stages (${chainBudgetMs}ms) must fit hookDeadlineMs (${limits.hookDeadlineMs}ms)` }
+    }
+    // D7: the escalation category set may only extend the global one — a superset
+    // keeps every global allowance valid on escalation stages and adds categories
+    // reachable only through an escalation-stage verdict (docs/04).
+    const rawAllowed = config.escalation.allowedCategories
+    if (rawAllowed !== undefined) {
+      const escalationSet = new Set<string>(rawAllowed)
+      const missing = policy.autoAllow.allowedCategories.filter((category) => !escalationSet.has(category))
+      if (missing.length > 0) {
+        return { message: `escalation.allowedCategories must be a superset of policy.autoAllow.allowedCategories (missing: ${missing.join(", ")})` }
+      }
     }
   }
 

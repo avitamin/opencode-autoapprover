@@ -326,3 +326,126 @@ describe("escalation chain limits", () => {
     expect(h.audit.records[0]?.attemptCount).toBeUndefined()
   })
 })
+
+describe("escalation category defer (D7)", () => {
+  // The live shape of a harness verdict for any binary run: LOW risk, READ+EXEC.
+  const EXEC_LOW = JSON.stringify({
+    schemaVersion: 2,
+    risk: "LOW",
+    categories: ["READ", "EXEC"],
+    confidence: "HIGH",
+    signals: [],
+    summary: "runs a project tool, read-only effect",
+  })
+
+  const WRITE_LOW = JSON.stringify({
+    schemaVersion: 2,
+    risk: "LOW",
+    categories: ["WRITE"],
+    confidence: "HIGH",
+    signals: [],
+    summary: "writes files inside workspace",
+  })
+
+  function deferHarness(configOverrides: Partial<GuardConfig> = {}): Harness {
+    return escalationHarness(
+      {
+        mode: "auto",
+        escalation: { models: [HIGH], allowedCategories: ["READ", "EXEC"] },
+        ...configOverrides,
+      },
+      true,
+    )
+  }
+
+  test("primary EXEC verdict deferred → high answers EXEC LOW → allow, attemptCount 2", async () => {
+    const h = deferHarness()
+    h.setReviewer(PRIMARY, new ScriptedReviewer([ScriptedReviewer.text(EXEC_LOW)]))
+    h.setReviewer(HIGH, new ScriptedReviewer([ScriptedReviewer.text(EXEC_LOW)]))
+    h.capture()
+    expect((await h.controller.handleEvaluate(makeEvent())).commit).toBe("allow")
+    await flush()
+    expect(h.requested).toEqual([key(PRIMARY), key(HIGH)])
+    expect(h.audit.records[0]?.reasonCode).toBe("RISK_WITHIN_THRESHOLD")
+    expect(h.audit.records[0]?.attemptCount).toBe(2)
+    expect(h.audit.records[0]?.model).toEqual(HIGH)
+    expect(h.trace.records[0]?.escalated).toBe(true)
+    expect(h.trace.records[0]?.attempts[0]?.assessment?.categories).toEqual(["READ", "EXEC"])
+  })
+
+  test("primary EXEC verdict deferred → high answers HIGH risk → ask RISK_ABOVE_THRESHOLD", async () => {
+    const h = deferHarness()
+    h.setReviewer(PRIMARY, new ScriptedReviewer([ScriptedReviewer.text(EXEC_LOW)]))
+    h.setReviewer(HIGH, new ScriptedReviewer([ScriptedReviewer.text(HIGH_RISK)]))
+    h.capture()
+    expect((await h.controller.handleEvaluate(makeEvent())).commit).toBe("unchanged")
+    await flush()
+    expect(h.requested).toEqual([key(PRIMARY), key(HIGH)])
+    expect(h.audit.records[0]?.reasonCode).toBe("RISK_ABOVE_THRESHOLD")
+    expect(h.audit.records[0]?.attemptCount).toBe(2)
+  })
+
+  test("escalation verdict outside the escalation set (WRITE) → ask CATEGORY_NOT_ALLOWED", async () => {
+    const h = deferHarness()
+    h.setReviewer(PRIMARY, new ScriptedReviewer([ScriptedReviewer.text(EXEC_LOW)]))
+    h.setReviewer(HIGH, new ScriptedReviewer([ScriptedReviewer.text(WRITE_LOW)]))
+    h.capture()
+    expect((await h.controller.handleEvaluate(makeEvent())).commit).toBe("unchanged")
+    await flush()
+    expect(h.audit.records[0]?.reasonCode).toBe("CATEGORY_NOT_ALLOWED")
+    expect(h.audit.records[0]?.attemptCount).toBe(2)
+  })
+
+  test("no deferred escalation without the extended set → single-stage ask CATEGORY_NOT_ALLOWED", async () => {
+    // Default inheritance: escalation.allowedCategories absent → the global set everywhere.
+    const h = escalationHarness({ mode: "auto", escalation: { models: [HIGH] } })
+    h.setReviewer(PRIMARY, new ScriptedReviewer([ScriptedReviewer.text(EXEC_LOW)]))
+    h.setReviewer(HIGH, new ScriptedReviewer([ScriptedReviewer.text(EXEC_LOW)]))
+    h.capture()
+    expect((await h.controller.handleEvaluate(makeEvent())).commit).toBe("unchanged")
+    await flush()
+    expect(h.requested).toEqual([key(PRIMARY)])
+    expect(h.audit.records[0]?.reasonCode).toBe("CATEGORY_NOT_ALLOWED")
+    expect(h.audit.records[0]?.attemptCount).toBeUndefined()
+  })
+
+  test("primary risk HIGH with EXEC → no defer → single-stage ask RISK_ABOVE_THRESHOLD", async () => {
+    const h = deferHarness()
+    h.setReviewer(PRIMARY, new ScriptedReviewer([ScriptedReviewer.text(HIGH_RISK)]))
+    h.setReviewer(HIGH, new ScriptedReviewer([ScriptedReviewer.text(EXEC_LOW)]))
+    h.capture()
+    expect((await h.controller.handleEvaluate(makeEvent())).commit).toBe("unchanged")
+    await flush()
+    // Risk gate is final: a stricter-axis failure never defers to the escalation stage.
+    expect(h.requested).toEqual([key(PRIMARY)])
+    expect(h.audit.records[0]?.reasonCode).toBe("RISK_ABOVE_THRESHOLD")
+    expect(h.audit.records[0]?.attemptCount).toBeUndefined()
+  })
+
+  test("defer blocked by stage budget → ask CATEGORY_NOT_ALLOWED, single call", async () => {
+    const h = deferHarness({
+      limits: { ...makeConfig().limits, llmTimeoutMs: 600, hookDeadlineMs: 1_500 },
+      escalation: { models: [HIGH], timeoutMs: 500, allowedCategories: ["READ", "EXEC"] },
+    })
+    h.setReviewer(PRIMARY, new ClockBurningReviewer(() => h.advance(800), ScriptedReviewer.text(EXEC_LOW)))
+    h.setReviewer(HIGH, new ScriptedReviewer([ScriptedReviewer.text(EXEC_LOW)]))
+    h.capture()
+    expect((await h.controller.handleEvaluate(makeEvent())).commit).toBe("unchanged")
+    await flush()
+    expect(h.requested).toEqual([key(PRIMARY)])
+    expect(h.audit.records[0]?.reasonCode).toBe("CATEGORY_NOT_ALLOWED")
+    expect(h.audit.records[0]?.attemptCount).toBeUndefined()
+  })
+
+  test("READ-only verdict stays single-stage even with the extended set", async () => {
+    const h = deferHarness()
+    h.setReviewer(PRIMARY, new ScriptedReviewer([ScriptedReviewer.text(CONFORMING_LOW)]))
+    h.setReviewer(HIGH, new ScriptedReviewer([ScriptedReviewer.text(EXEC_LOW)]))
+    h.capture()
+    expect((await h.controller.handleEvaluate(makeEvent())).commit).toBe("allow")
+    await flush()
+    // Within the global set → conclusive at stage 0, no unnecessary escalation call.
+    expect(h.requested).toEqual([key(PRIMARY)])
+    expect(h.audit.records[0]?.attemptCount).toBeUndefined()
+  })
+})

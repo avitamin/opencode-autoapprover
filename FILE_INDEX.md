@@ -65,7 +65,7 @@
 
 | Файл | Назначение |
 |---|---|
-| [package.json](package.json) | Пакет `opencode-llm-approval` v2.4.0, scripts `typecheck/test/build/check/test:contract/test:live`. |
+| [package.json](package.json) | Пакет `opencode-llm-approval` v2.5.0, scripts `typecheck/test/build/check/test:contract/test:live`. |
 | [tsconfig.json](tsconfig.json) | Strict TS для src+tests (noUncheckedIndexedAccess, exactOptionalPropertyTypes, verbatimModuleSyntax). |
 | [tsconfig.build.json](tsconfig.build.json) | Emit `dist/` для упаковки. |
 | [bun.lock](bun.lock) | Точные версии зависимостей (282 пакета). |

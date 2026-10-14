@@ -19,6 +19,7 @@ Runtime config guard: `${XDG_CONFIG_HOME:-$HOME/.config}/opencode-llm-approval/c
 | `escalation.models` | Опциональная цепочка из 1–2 моделей; отсутствие секции — одиночная оценка на `model` (поведение по умолчанию) |
 | `escalation.triggerOn` | Флаги триггеров `unknownRisk` / `invalidResponse` / `lowConfidence`; каждый дефолт `true` |
 | `escalation.timeoutMs` | Бюджет ступени эскалации 500–30 000 мс; дефолт 9 000 |
+| `escalation.allowedCategories` | D7: категории вердикта ступени эскалации; обязано быть надмножеством `policy.autoAllow.allowedCategories` (нарушение → `CONFIG_INVALID`), дефолт — наследование глобального набора. Вердикт primary, не прошедший только глобальную категорийную проверку и проходящий этот набор, один раз откладывается на следующую модель цепочки |
 | `policy.autoAllow.maxRisk` | Максимальный разрешаемый риск: `LOW` или `MEDIUM`; дефолт `LOW`. HIGH/CRITICAL/UNKNOWN структурно неразрешимы |
 | `policy.autoAllow.minConfidence` | Минимальная уверенность ответа: `MEDIUM` или `HIGH`; дефолт `HIGH`. LOW структурно неразрешим |
 | `policy.autoAllow.allowedCategories` | Непустой набор категорий, попадающих под автоапрув; дефолт `[READ]`. Категория `UNKNOWN` структурно неразрешима |

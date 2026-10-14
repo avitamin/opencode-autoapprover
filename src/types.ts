@@ -91,13 +91,23 @@ export interface EscalationConfig {
   }
   /** Per-escalation-stage deadline; default 9000. */
   readonly timeoutMs?: number
+  /**
+   * D7: categories an escalation-stage verdict may carry. Must be a superset of
+   * policy.autoAllow.allowedCategories; absent → the global set (single-policy
+   * behavior). A stage-0 verdict that fails only the global category check and
+   * would pass this set is deferred to the next chain model.
+   */
+  readonly allowedCategories?: readonly AllowedCategory[]
 }
+
+/** Verdict categories the operator may allow (schemas/config.schema.json enum; UNKNOWN is structurally excluded). */
+export type AllowedCategory = "READ" | "WRITE" | "EXEC" | "NETWORK" | "STATE_CHANGE"
 
 /** Operator authorization threshold (schemas/config.schema.json structural ceilings apply). */
 export interface AutoAllowPolicy {
   readonly maxRisk: "LOW" | "MEDIUM"
   readonly minConfidence: "MEDIUM" | "HIGH"
-  readonly allowedCategories: readonly ("READ" | "WRITE" | "EXEC" | "NETWORK" | "STATE_CHANGE")[]
+  readonly allowedCategories: readonly AllowedCategory[]
 }
 
 export interface GuardLimits {
