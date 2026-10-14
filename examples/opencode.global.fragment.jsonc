@@ -1,0 +1,33 @@
+// ФРАГМЕНТ для ручного слияния с существующим GLOBAL OpenCode V2 config.
+// Сохранить свои deny, agent/session rules и остальные настройки.
+// В ordered rules вставлять общий shell/ask ПЕРЕД более узкими deny:
+// последнее совпадение выигрывает; не дописывать этот ask после запретов.
+// REPLACE_ME_PATH — проверенная установленная копия, не рабочее дерево агента.
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    // Путь должен указывать на КАТАЛОГ с точкой входа index.ts в его корне
+    // (проверено host-smoke opencode v2.0.18: файловый путь отклоняется
+    // предупреждением «configured plugin path must be a directory»).
+    // Путь — абсолютный (хост не разворачивает «~»); пример установки
+    // по INSTALL.md: "/home/<user>/.local/share/opencode-llm-approval-v2.1.0/opencode-llm-approval"
+    "/REPLACE_ME_PATH/opencode-llm-approval"
+  ],
+  "permissions": [
+    // Детерминированный базовый слой: всё непокрытое остаётся человеку.
+    { "action": "shell", "resource": "*", "effect": "ask" },
+
+    // Рекомендуемый deny-фрагмент: чувствительные пути, которые не должны
+    // автоматически разрешаться ни локальным gate, ни LLM-оценкой.
+    // Оператор сужает/расширяет список осознанно; это часть host-слоя,
+    // не политика плагина.
+    { "action": "shell", "resource": "cat ~/.ssh/*", "effect": "deny" },
+    { "action": "shell", "resource": "cat ~/.aws/*", "effect": "deny" },
+    { "action": "shell", "resource": "cat ~/.gnupg/*", "effect": "deny" },
+    { "action": "shell", "resource": "cat ~/.kube/*", "effect": "deny" },
+    { "action": "shell", "resource": "cat *.env", "effect": "deny" },
+    { "action": "shell", "resource": "cat *.env.*", "effect": "deny" },
+    { "action": "shell", "resource": "sudo *", "effect": "deny" },
+    { "action": "shell", "resource": "rm -rf /*", "effect": "deny" }
+  ]
+}

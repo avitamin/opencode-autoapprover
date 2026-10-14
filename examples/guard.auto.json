@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 2,
+  "mode": "auto",
+  "model": {
+    "providerID": "REPLACE_ME_PROVIDER_ID",
+    "id": "REPLACE_ME_MODEL_ID"
+  },
+  "policy": {
+    "autoAllow": {
+      "maxRisk": "LOW",
+      "minConfidence": "HIGH",
+      "allowedCategories": ["READ"]
+    },
+    "workspaceRoots": [
+      "/home/REPLACE_ME_USER/projects/REPLACE_ME_PROJECT"
+    ],
+    "alwaysAskPathPrefixes": [
+      "secrets",
+      "credentials",
+      "production"
+    ]
+  },
+  "privacy": {
+    "allowCommandTransmission": true,
+    "destinationReview": "REPLACE_ME: проверьте endpoint, API-key account и допустимость передачи данных."
+  },
+  "limits": {
+    "hookDeadlineMs": 8000,
+    "llmTimeoutMs": 6500,
+    "maxInFlight": 2,
+    "maxAssessmentsPerMinute": 20,
+    "maxCommandBytes": 4096,
+    "maxResources": 8,
+    "maxPayloadBytes": 8192,
+    "maxResponseBytes": 8192
+  },
+  "audit": {
+    "directory": "/home/REPLACE_ME_USER/.local/state/opencode-llm-approval",
+    "maxFileBytes": 5242880,
+    "retainedFiles": 3
+  }
+}

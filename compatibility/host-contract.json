@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "status": "PARTIAL_M0",
+  "verifiedAt": "2026-09-28",
+  "host": {
+    "binary": "<user-home>/.opencode/bin/opencode",
+    "version": "v2.0.18",
+    "sdkPackage": "@opencode/plugin",
+    "sdkVersion": "2.0.18 (npm latest = host version; установка и typecheck — M1; probe работал без импорта SDK через plain default export)",
+    "platform": "Linux x86_64 (Ubuntu 24.04)",
+    "shell": "host-managed (probe-сессии через стандартный shell-инструмент агента)"
+  },
+  "fieldMapping": {
+    "toolName": "event.tool === \"shell\" (ctx.tool.hook(\"execute.before\"))",
+    "fullCommand": "tool.before event.input.command — ПОЛНАЯ raw-команда, включая compound; permission.resources НЕ являются полной командой (см. cdCompoundNoBypass)",
+    "cwd": "tool.before event.input.workdir — присутствует, только когда агент задал его явно; иначе cwd = location directory",
+    "sessionID": "event.sessionID (ses_*)",
+    "messageID": "event.source.messageID (msg_*)",
+    "toolCallID": "event.source.id (call_*); совпадает с id tool_use-парта в стриме сессии",
+    "permissionSource": "event.source = { type: \"tool\", messageID, id }; event.metadata === null — полной команды в permission-событии нет",
+    "effectiveRuntimeTrust": null
+  },
+  "checks": {
+    "pluginLoad": "PASS",
+    "nativeAsk": "PASS",
+    "nativeAllowUntouched": "PASS",
+    "nativeDenyFinal": "PASS",
+    "fullCommandBinding": "PASS",
+    "concurrentBinding": "PASS",
+    "cdCompoundNoBypass": "PASS",
+    "pipelineNoBypass": "PASS",
+    "explicitStatelessModel": "PASS (T11 live, consent): 7 живых вызовов ровно по форме generate.text({prompt, model:{id,providerID}}, {signal}), модель фиксирована конфигом guard; redirect/injection-пробы NOT_EVALUATED_LIVE",
+    "noSessionOrTools": "PARTIAL (M4+T11): в живом ревью-вызове только prompt+model, без session/tools/history; plugin runtime трогает только permission/tool/generate/model/location (harness-трейс)",
+    "timeoutNoLateAllow": "PASS (M4): ask/TIMEOUT на 1502ms при llmTimeoutMs=1500; поздний LOW отброшен (generate settle aborted/AbortError); один вызов, retry нет",
+    "unloadCleanup": "PASS",
+    "pluginComposition": "PARTIAL (M4): ctx.plugin.list() возвращает [] для локальных плагинов на v2.0.18 — API не раскрывает ни списка локальных, ни хуков; квалификация по логам загрузки (сторонний глобальный плагин permission-хуков не регистрировал)",
+    "packagedInstall": "PASS (M4): staged-копия вне рабочего дерева (dist + prompts + prod node_modules) загружается и работает на фазах A/B/C. HOST FACT: entry из config `plugins:[dir]` резолвится как <dir>/index.ts; package.json main НЕ используется — без index.ts плагин молчаливо пропускается (в пакет добавлен index.ts-шим)"
+  },
+  "generation": {
+    "publicMethod": "LIVE VERIFIED (T11, consent): 7 живых вызовов generate.text({prompt, model}, {signal}) на выбранной оператором модели, строгий JSON-ответ, порог применён детерминированно; redirect/injection-пробы NOT_EVALUATED_LIVE (транспорт превышал бюджет)",
+    "abortSupported": "signal передаётся; прерванный живой вызов НЕ settle'ится до конца процесса (не reject, не resolve) — контроллер глотает штатно; remoteCancellationVerified: NOT_RUN",
+    "remoteCancellationVerified": null,
+    "baseScopeModelAvailable": true,
+    "hiddenHostRetriesObserved": false,
+    "responseSizeEnforcedBeforeBuffering": "NOT_RUN (план: M5)",
+    "liveLatencyObserved": "живые вызовы измерены; наблюдались окна деградации транспорта сверх бюджета — закладывать llmTimeoutMs с запасом либо более быструю модель ревьюера (замеры — локальный evidence оператора)"
+  },
+  "trustedAssumptions": [
+    "driver-модель project scope доступна (факт успешных run-сессий); reviewer-модель выбирается отдельно",
+    "провайдер и ключ обслуживаются хостом; probe не читал auth.json/credentials",
+    "pending ask в non-interactive run авто-reject'ается клиентом («permission requested: shell (pwd); auto-rejecting»); интерактивный клиент отвечает пользователь"
+  ],
+  "blockers": [],
+  "evidence": [
+    "локальные evidence-протоколы оператора (не публикуются): probe-трейсы S-A…S-E (M0), packaged host smoke (M4)",
+    "полные логи — одноразовые каталоги вне репо"
+  ],
+  "notes": [
+    "КРИТИЧНО: scanner теряет ведущий cd — для `cd . && printf probe_cd` resources === [\"printf probe_cd\"]. Решение guard'а обязано строиться на полном input.command из tool-capture, resources — только вспомогательные. Разрешение по совпадению resource неполно. (Подтверждено в M4-B2 на packaged-конвейере.)",
+    "@opencode/plugin НЕ предоставляется хостом плагинам автоматически: import из .opencode/plugins/* падает «Cannot find package» до локальной установки пакета. Для production-плагина — dependency с точным pin 2.0.18; probe обошёлся plain default export {id, setup}.",
+    "Авто-дискавери плагина работает в форме каталога .opencode/plugins/<name>/index.ts (плоский .ts не подхватился). M4: config `plugins:[dir]` тоже требует <dir>/index.ts; package.json main игнорируется — packaged-поставка включает index.ts-шим.",
+    "Правила permissions: ПОСЛЕДНЕЕ совпавшее правило побеждает — широкие правила первыми, исключения после (V2 docs /permissions).",
+    "Глобальные плагины хоста грузятся и в standalone; наблюдавшийся сторонний глобальный плагин permission-хуков не регистрировал; ctx.plugin.list() на v2.0.18 не отражает локальные плагины — composition-квалификация по логам загрузки.",
+    "cd/prompt bypass (issue E9) на этой сборке/Linux НЕ наблюдён: evaluate вызывался для всех compound-команд.",
+    "Cleanup-функция setup() вызывается при завершении run (записи «unloaded»; M4-трейс: dispose при каждом завершении run).",
+    "Драйвер run-сессий: без явного -m дефолтная модель может падать по лимитам аккаунта; с явным -m работает. Не полагаться на дефолтную модель в драйвере."
+  ]
+}

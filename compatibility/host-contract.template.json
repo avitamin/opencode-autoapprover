@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "status": "NOT_RUN",
+  "verifiedAt": null,
+  "host": {
+    "binary": null,
+    "version": null,
+    "sdkPackage": "@opencode/plugin",
+    "sdkVersion": null,
+    "platform": null,
+    "shell": null
+  },
+  "fieldMapping": {
+    "toolName": null,
+    "fullCommand": null,
+    "cwd": null,
+    "sessionID": null,
+    "messageID": null,
+    "toolCallID": null,
+    "permissionSource": null,
+    "effectiveRuntimeTrust": null
+  },
+  "checks": {
+    "pluginLoad": "NOT_RUN",
+    "nativeAsk": "NOT_RUN",
+    "nativeAllowUntouched": "NOT_RUN",
+    "nativeDenyFinal": "NOT_RUN",
+    "fullCommandBinding": "NOT_RUN",
+    "concurrentBinding": "NOT_RUN",
+    "cdCompoundNoBypass": "NOT_RUN",
+    "pipelineNoBypass": "NOT_RUN",
+    "explicitStatelessModel": "NOT_RUN",
+    "noSessionOrTools": "NOT_RUN",
+    "timeoutNoLateAllow": "NOT_RUN",
+    "unloadCleanup": "NOT_RUN",
+    "pluginComposition": "NOT_RUN",
+    "packagedInstall": "NOT_RUN"
+  },
+  "generation": {
+    "publicMethod": null,
+    "abortSupported": null,
+    "remoteCancellationVerified": null,
+    "baseScopeModelAvailable": null,
+    "hiddenHostRetriesObserved": null,
+    "responseSizeEnforcedBeforeBuffering": null
+  },
+  "trustedAssumptions": [],
+  "blockers": [],
+  "evidence": []
+}

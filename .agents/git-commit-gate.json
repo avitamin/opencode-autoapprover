@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "branch_regex": "^(?P<issue_key>)(?P<branch>main|(?:feat|fix)/[a-z0-9]+(?:-[a-z0-9]+)*)$",
+  "commit_subject_regex": "^(?P<issue_key>)(?P<type>docs|feat|fix|test|refactor|build|chore)(?:\\((?P<scope>[a-z0-9-]+)\\))?: (?P<subject>[a-z][a-z0-9 ,:'-]{0,70})$"
+}

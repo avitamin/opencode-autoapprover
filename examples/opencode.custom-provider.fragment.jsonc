@@ -1,0 +1,21 @@
+// Не нужен, если API-key provider уже настроен и доступен в base/global scope.
+// Это настройка OPENCode, а не direct-HTTP transport или fallback guard.
+// Использовать только после выбора реального совместимого endpoint и модели.
+// Ключ — в окружении процесса сервера, не в этом файле и не в workspace .env.
+{
+  "providers": {
+    "REPLACE_ME_PROVIDER_ID": {
+      "name": "Approval reviewer provider",
+      "env": ["REPLACE_ME_API_KEY_ENV"],
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://REPLACE_ME_ENDPOINT.invalid/v1"
+      },
+      "models": {
+        "REPLACE_ME_MODEL_ID": {
+          "name": "Approval reviewer model"
+        }
+      }
+    }
+  }
+}

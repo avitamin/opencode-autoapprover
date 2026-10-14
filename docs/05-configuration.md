@@ -1,0 +1,88 @@
+# 05. Конфигурация
+
+## Два независимых слоя
+
+OpenCode обслуживает provider, credentials, model catalog и plugin loading. Guard обслуживает режим, reviewer selection, workspace admission, privacy и лимиты. Настройки guard не копируют внутренний формат credential storage OpenCode.
+
+Runtime config guard: `${XDG_CONFIG_HOME:-$HOME/.config}/opencode-llm-approval/config.json`. На первоначальной Linux-реализации это фиксированный глобальный путь, не поиск файлов вверх от cwd. Production-конфиг не читается из `ctx.options`, `.opencode/`, README или AGENTS рабочего проекта. Не использовать проектный `.env` как policy source.
+
+При отсутствии файла — неактивный guard без LLM-запросов и предупреждение с путем настройки. Невалидный файл даёт тот же безопасный результат; не применять частично разобранные значения. Формат строгий JSON, без комментариев. `examples/` — шаблоны, не автоматическая конфигурация.
+
+## Поля
+
+| Поле | Значение / смысл |
+|---|---|
+| `schemaVersion` | `2` |
+| `mode` | `off`, `shadow`, `auto` |
+| `model.providerID`, `model.id` | Обязательные явные IDs, без fallback на coding/default model |
+| `model.variant` | Необязательный реально существующий variant; неизвестный → ошибка настройки |
+| `escalation.models` | Опциональная цепочка из 1–2 моделей; отсутствие секции — одиночная оценка на `model` (поведение по умолчанию) |
+| `escalation.triggerOn` | Флаги триггеров `unknownRisk` / `invalidResponse` / `lowConfidence`; каждый дефолт `true` |
+| `escalation.timeoutMs` | Бюджет ступени эскалации 500–12 000 мс; дефолт 9 000 |
+| `policy.autoAllow.maxRisk` | Максимальный разрешаемый риск: `LOW` или `MEDIUM`; дефолт `LOW`. HIGH/CRITICAL/UNKNOWN структурно неразрешимы |
+| `policy.autoAllow.minConfidence` | Минимальная уверенность ответа: `MEDIUM` или `HIGH`; дефолт `HIGH`. LOW структурно неразрешим |
+| `policy.autoAllow.allowedCategories` | Непустой набор категорий, попадающих под автоапрув; дефолт `[READ]`. Категория `UNKNOWN` структурно неразрешима |
+| `policy.workspaceRoots` | Непустой список canonical absolute roots, явно допущенных оператором |
+| `policy.alwaysAskPathPrefixes` | Дополнительные workspace-relative literal paths; только ужесточают built-in exclusions |
+| `privacy.allowCommandTransmission` | Явное согласие на минимальный model payload; изначально false |
+| `privacy.destinationReview` | Операторская запись, какой endpoint/account/API-key provider проверен; не enforcement network pin |
+| `limits.*` | Hook/LLM deadline, размеры, частота, in-flight; значения не выше ceilings схемы |
+| `audit.directory` | Абсолютный локальный каталог вне workspace; 0700, JSONL files 0600 |
+| `audit.maxFileBytes`, `audit.retainedFiles` | Rotation: текущий + заданное максимальное общее число файлов |
+| `diagnostics.llmTrace.enabled` | Opt-in полный трейс LLM-оценок; отсутствие секции или `false` — трейса нет (поведение по умолчанию) |
+| `diagnostics.llmTrace.directory` | Абсолютный каталог трейса вне workspace; по умолчанию `audit.directory`; те же правила (не symlink, вне roots, без `REPLACE_ME`) |
+| `diagnostics.llmTrace.maxFileBytes`, `diagnostics.llmTrace.retainedFiles` | Rotation трейса: файлы по UTC-дню `trace-YYYY-MM-DD.jsonl`, до 50 MiB на файл и до 30 файлов retention; дефолт 5 MiB / 7 |
+
+Схема: `schemas/config.schema.json`. Дополнительные поля запрещены. Defaults лимитов приведены в примере; implementation не должен silently принимать опечатки.
+
+Порог `autoAllow` — доверенная политика авторизации. Его расширение (например, `maxRisk: MEDIUM` или добавление `WRITE`) — сознательное решение оператора, требующее обновлённой оценки модели на негативном корпусе; в shadow-режиме сначала наблюдается фактическое распределение оценок. Потолки (`HIGH`/`CRITICAL`/`UNKNOWN` по риску, `LOW` по confidence, `UNKNOWN` по категории) не обходятся конфигурацией: этих значений нет в enum схемы.
+
+## Эскалационная цепочка (D3, opt-in)
+
+Секция `escalation` включает ограниченную многоступенчатость: если первичная модель вернула неконкретный результат, команда один раз переоценивается следующей моделью цепочки (до двух ступеней). Триггеры (все управляются `triggerOn`, дефолт `true`):
+
+- `unknownRisk` — валидный ответ с `risk: UNKNOWN` (по контракту оценок такой ответ всегда имеет `confidence: LOW` и категорию `UNKNOWN`);
+- `invalidResponse` — ответ не парсится / не проходит схему/когерентность или превышает лимит размера;
+- `lowConfidence` — валидный ответ с `confidence: LOW`: ненадёжен весь вердикт целиком, включая risk, поэтому эскалация переоценивает команду полностью.
+
+Не эскалируются никогда: конкретный вердикт (включая опасный `MEDIUM+` — это не retry-until-allow), транспортные сбои провайдера (`PROVIDER_ERROR`, 429) и timeout (abort уже сработал). Итог любой ступени проходит те же потолки и порог `autoAllow`; лимиты частоты/in-flight считаются на событие, а не на физический вызов. Ступень не стартует, если до hook-дедлайна осталось меньше 1 000 мс. Все модели цепочки (включая первичную) проверяются на доступность при старте: отсутствующая модель → `MODEL_UNAVAILABLE` (ask), тихого даунгрейда цепочки нет. Шаблон (плейсхолдеры `REPLACE_ME` обязан заменить оператор — валидатор их отвергает):
+
+```jsonc
+"model": { "providerID": "REPLACE_ME", "id": "REPLACE_ME", "variant": "REPLACE_ME" },
+"escalation": {
+  "models": [ { "providerID": "REPLACE_ME", "id": "REPLACE_ME", "variant": "REPLACE_ME" } ],
+  "triggerOn": { "unknownRisk": true, "invalidResponse": true, "lowConfidence": true },
+  "timeoutMs": 9000
+}
+```
+
+Если ступени используют других провайдеров, команда уходит каждому из них: перечислите все направления в `privacy.destinationReview` и убедитесь, что consent покрывает каждого провайдера цепочки.
+
+## Диагностика LLM (opt-in)
+
+
+`diagnostics.llmTrace` — явное включение трейса решений для офлайн-анализа: одна JSONL-запись (`traceVersion: 3`) на каждое решённое событие. Записи с `llmCalled: true` — полные пары «команда → ответ» по каждой физической попытке: массив `attempts` (модель, `llmLatencyMs`, сырой ответ, результат парсинга, вердикт), `escalated`, верхние поля зеркалят последнюю попытку, `model` — решающая ступень. Записи с `llmCalled: false` объясняют, почему событие не дошло до ревьюера: preflight-стопы (`OUTSIDE_SCOPE`, `INPUT_MISMATCH`, `PAYLOAD_TOO_LARGE`, `PRIVACY_BLOCKED`) сохраняют команду и resources; `SECRET_DETECTED` — только `inputFingerprint` без сырого текста; не-shell действия (`UNKNOWN_ACTION`) — только имя `action` без команды. Нативные разрешения/запреты (`NATIVE_ALLOW`/`NATIVE_DENY`) и конфиг-уровневые стопы не трейсаются — их покрывает аудит. Семантика — docs/07: трейс best-effort, пишется после принятия решения и не ожидается на decision-пути; отказ трейса не меняет effect (в отличие от аудита). Работает и в `shadow`, и в `auto`, если включён.
+
+Файлы трейса содержат текст команд и ответы каждой модели цепочки — обращаться как с чувствительными: не коммитить и не публиковать; каталог 0700, файлы 0600. Включение — осознанное локальное решение оператора. Трейс не передаёт данных наружу; начиная с `traceVersion: 2` он может содержать и команды, которые **не** уходили провайдеру (остановлены preflight, включая `PRIVACY_BLOCKED` при выключенном consent); команды со стопом `SECRET_DETECTED` записываются только фингерпринтом, без сырого текста. В дневных файлах могут соседствовать записи `traceVersion` 1/2/3 — различать по полю.
+
+## Семантическая валидация сверх JSON Schema
+
+`llmTimeoutMs < hookDeadlineMs`; оставить не меньше 500 мс для финальных проверок и аудита. При наличии `escalation`: все модели цепочки уникальны и отличаются от первичной; суммарный бюджет `llmTimeoutMs + N × timeoutMs` влезает в `hookDeadlineMs`; плейсхолдеры `REPLACE_ME` недопустимы и в моделях ступеней. Корни не равны `/`, home целиком или глобальным каталогам конфигурации; они существуют, не являются symlink и не пересекаются с каталогом аудита/установленным guard. Prefix exclusions не содержат `..`, wildcard или абсолютный путь. Строки `REPLACE_ME` означают незаполненный пример и operationally invalid.
+
+Для network-enabled shadow/auto оператор должен заполнить `destinationReview` и `allowCommandTransmission=true`. Это осознанное подтверждение доверенной конфигурации, не доказательство технической безопасности провайдера. Ключ хранится и используется штатным способом OpenCode. Плагин не определяет тарифные права по факту наличия ключа и не переключается между OAuth/подпиской/API автоматически.
+
+Проверка наличия модели делается в **том base scope, который обслуживает stateless generation**, не только по модели активной сессии. Если публичный SDK не позволяет точно проверить account/endpoint origin, записать доверенное допущение в compatibility record; не притворяться, что endpoint криптографически закреплён. На сомнительном deployment live auto не допускается.
+
+## Изменения во время работы
+
+Конфиг читается при load, валидируется и замораживается. MVP не имеет auto-reload и не включает `auto` через произвольные environment variables. После правки оператор перезагружает плагин/хост штатным способом и повторяет соответствующий smoke.
+
+Одна переменная аварийного отключения допустима: `OPENCODE_LLM_APPROVAL_DISABLE=1`. Она может только отключить guard. Её проверять и при load, и перед финальным allow; не запускать дополнительные polling services. Изменение окружения другого уже запущенного процесса не происходит само собой: для внешнего изменения обычно нужен restart.
+
+Runtime config/поставленный пакет не должны изменяться агентом. В production устанавливать проверенную копию вне рабочего репозитория, а не подключать изменяемый `src/index.ts` из той же сессии.
+
+## Настройки OpenCode
+
+Пример `examples/opencode.global.fragment.jsonc` добавляет локально установленный plugin package и `permissions` с `shell` → `ask`. Это **фрагмент для ручного слияния**, не замена всего конфига: сохранить собственные deny и остальные plugins. В ordered rules общий `shell/*/ask` вставлять **перед** более узкими deny: последнее совпадение выигрывает. Нельзя просто дописать общий ask в конец после запретов. Другие agent/session rules могут менять effective decision; проверить результат smoke, а не только наличие одной строки в JSON.
+
+Для уже подключенного API-key provider никаких ключей в guard config нет. Для нестандартного endpoint приведён отдельный custom provider fragment. Он настраивает **OpenCode**, а не резервный transport плагина. В MVP нет auto fallback на него.
