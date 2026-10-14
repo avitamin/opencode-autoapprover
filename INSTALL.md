@@ -21,20 +21,20 @@
 ```bash
 # в клоне репозитория (однократно):
 bun install
-bun run check          # typecheck + 413 offline-тестов + build; без сети и ключей
+bun run check          # typecheck + 415 offline-тестов + build; без сети и ключей
 
 # упаковка staged-копии вне рабочего дерева:
 bun run build
-bun scripts/make-package.ts --stage ~/.local/share/opencode-llm-approval-v2.5.0
-cd ~/.local/share/opencode-llm-approval-v2.5.0/opencode-llm-approval
+bun scripts/make-package.ts --stage ~/.local/share/opencode-llm-approval-v2.6.0
+cd ~/.local/share/opencode-llm-approval-v2.6.0/opencode-llm-approval
 bun install --production
 ```
 
 Упаковщик принимает только новый или пустой staged-каталог и не перезаписывает прежнюю сборку. При обновлении установленной копии сначала сравнивайте состав пакетов (старый dist + новый конфиг с новыми секциями → `CONFIG_INVALID` → все ask — обновляйте dist и конфиг вместе; протоколы обновлений — локальный evidence оператора).
 
-Место установки по умолчанию — домашняя директория пользователя (`~/.local/share/`, XDG): вне редактируемого агентом рабочего дерева и вне исчезающего `/tmp`. Версионный корень (`…-v2.5.0`) позволяет держать предыдущую сборку для отката (п. 5.4).
+Место установки по умолчанию — домашняя директория пользователя (`~/.local/share/`, XDG): вне редактируемого агентом рабочего дерева и вне исчезающего `/tmp`. Версионный корень (`…-v2.6.0`) позволяет держать предыдущую сборку для отката (п. 5.4).
 
-Структура staged-пакета: `dist/` (скомпилированный JS), `prompts/reviewer-system.txt`, `index.ts` (entry-шим; host-факт: `plugins:[<dir>]` резолвит `<dir>/index.ts` и игнорирует `package.json main`), prod-`node_modules/`. Каталог дальше по тексту — `$PKG = ~/.local/share/opencode-llm-approval-v2.5.0/opencode-llm-approval`. В bash `~` разворачивается шеллом; в `opencode.json` (`plugins`) путь писать **абсолютным** (`/home/<user>/…`) — проверенные прогоны шли с абсолютным путём, разворачивание `~` в JSON-конфиге хостом не проверялось.
+Структура staged-пакета: `dist/` (скомпилированный JS), `prompts/reviewer-system.txt`, `index.ts` (entry-шим; host-факт: `plugins:[<dir>]` резолвит `<dir>/index.ts` и игнорирует `package.json main`), prod-`node_modules/`. Каталог дальше по тексту — `$PKG = ~/.local/share/opencode-llm-approval-v2.6.0/opencode-llm-approval`. В bash `~` разворачивается шеллом; в `opencode.json` (`plugins`) путь писать **абсолютным** (`/home/<user>/…`) — проверенные прогоны шли с абсолютным путём, разворачивание `~` в JSON-конфиге хостом не проверялось.
 
 ## 3. Guard-конфиг (глобальный, доверенный)
 

@@ -35,6 +35,12 @@ import type {
 
 const REGISTRY_CAP = 256
 const ENTRY_TTL_MS = 60_000
+/**
+ * Margin on top of the assessment deadline for the janitor sweep (docs/07):
+ * covers the post-loop steps (final checks, awaited audit append) so the
+ * sweep never races a still-governed assessment.
+ */
+const ENTRY_SWEEP_MARGIN_MS = 5_000
 const RATE_WINDOW_MS = 60_000
 /** An escalation stage is started only when the remaining hook budget leaves it a meaningful slice (docs/07). */
 const MIN_STAGE_BUDGET_MS = 1_000
@@ -96,6 +102,8 @@ interface ActiveEntry {
   phase: "captured" | "classifying" | "decided" | "done"
   used: boolean
   abort: AbortController | null
+  /** Janitor sweep deadline; extended to the assessment deadline on admission (docs/07). */
+  sweepAt: number
 }
 
 export class GuardController {
@@ -123,6 +131,7 @@ export class GuardController {
       phase: "captured",
       used: false,
       abort: null,
+      sweepAt: this.deps.clock() + ENTRY_TTL_MS,
     })
   }
 
@@ -175,7 +184,10 @@ export class GuardController {
       if (expiry <= now) this.tombstones.delete(id)
     }
     for (const [id, entry] of this.active) {
-      if (ENTRY_TTL_MS <= now - entry.snapshot.capturedAt) {
+      // Sweep deadline is per entry: the fixed TTL for forgotten snapshots,
+      // extended to the assessment's own deadline once admitted (docs/07) —
+      // unrelated traffic must not abort an in-flight chain its deadline still governs.
+      if (entry.sweepAt <= now) {
         entry.abort?.abort()
         entry.phase = "done"
         this.active.delete(id)
@@ -485,6 +497,9 @@ export class GuardController {
     // One admitted assessment: consume the entry, occupy a slot, start the clocks.
     entry.used = true
     entry.phase = "classifying"
+    // Align the janitor with this assessment's deadline (docs/07): long chains
+    // under raised stage budgets (D6) may legitimately outlive the fixed TTL.
+    entry.sweepAt = Math.max(entry.sweepAt, start + config.limits.hookDeadlineMs + ENTRY_SWEEP_MARGIN_MS)
     const abort = new AbortController()
     entry.abort = abort
     const generation = this.generation

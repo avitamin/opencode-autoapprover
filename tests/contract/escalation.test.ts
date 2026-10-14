@@ -449,3 +449,51 @@ describe("escalation category defer (D7)", () => {
     expect(h.audit.records[0]?.attemptCount).toBeUndefined()
   })
 })
+
+describe("registry sweep alignment (review finding, 14.10)", () => {
+  /** Reviewer that waits for an external gate before answering; the fake clock moves meanwhile. */
+  class GatedReviewer implements ReviewerPort {
+    constructor(
+      private readonly gate: Promise<void>,
+      private readonly result: ReviewerResult,
+    ) {}
+    async assess(): Promise<ReviewerResult> {
+      await this.gate
+      return this.result
+    }
+  }
+
+  test("unrelated traffic must not sweep an in-flight assessment inside its deadline", async () => {
+    // Reproduced by the reviewer: a 61s chain under a 100s hook budget. The fixed
+    // 60s TTL let any foreign snapshot abort it with a spurious TIMEOUT ask.
+    const h = escalationHarness(
+      { mode: "auto", limits: { ...makeConfig().limits, llmTimeoutMs: 90_000, hookDeadlineMs: 100_000 } },
+      false,
+    )
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    h.setReviewer(PRIMARY, new GatedReviewer(gate, ScriptedReviewer.text(CONFORMING_LOW)))
+    h.capture()
+    const pending = h.controller.handleEvaluate(makeEvent())
+    // Past the fixed TTL, still inside the assessment's own deadline.
+    h.advance(61_000)
+    h.controller.captureSnapshot(makeSnapshot({ toolCallID: "foreign" }))
+    release()
+    expect((await pending).commit).toBe("allow")
+    await flush()
+    expect(h.audit.records[0]?.reasonCode).toBe("RISK_WITHIN_THRESHOLD")
+  })
+
+  test("forgotten captured snapshot is still swept past the fixed TTL", async () => {
+    const h = escalationHarness({ mode: "auto" }, false)
+    h.capture({ toolCallID: "stale" })
+    h.advance(61_000)
+    // Any later traffic runs the janitor; the stale entry must not survive.
+    h.controller.captureSnapshot(makeSnapshot({ toolCallID: "fresh" }))
+    expect((await h.controller.handleEvaluate(makeEvent({ sourceToolCallID: "stale" }))).commit).toBe("unchanged")
+    await flush()
+    expect(h.audit.records[0]?.reasonCode).toBe("INPUT_UNBOUND")
+  })
+})
