@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Minimal reviewer input — project contract v2",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "command": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "resources": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      }
+    },
+    "cwdRelative": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "workspaceLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "localFacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scopeAuthorized": {
+          "const": true
+        },
+        "commandComplete": {
+          "const": true
+        },
+        "sensitiveDataDetected": {
+          "const": false
+        }
+      },
+      "required": [
+        "scopeAuthorized",
+        "commandComplete",
+        "sensitiveDataDetected"
+      ]
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "command",
+    "resources",
+    "cwdRelative",
+    "workspaceLabel",
+    "localFacts"
+  ]
+}

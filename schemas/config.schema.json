@@ -1,0 +1,325 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OpenCode LLM Approval — project configuration v2",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "modelRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "providerID": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "variant": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        }
+      },
+      "required": [
+        "providerID",
+        "id"
+      ]
+    }
+  },
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "mode": {
+      "enum": [
+        "off",
+        "shadow",
+        "auto"
+      ]
+    },
+    "model": {
+      "$ref": "#/$defs/modelRef"
+    },
+    "escalation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional bounded escalation chain (D3): an inconclusive stage (per triggerOn) is retried on the next model; never a retry-until-allow loop.",
+      "properties": {
+        "models": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/modelRef"
+          }
+        },
+        "triggerOn": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "unknownRisk": {
+              "type": "boolean",
+              "default": true
+            },
+            "invalidResponse": {
+              "type": "boolean",
+              "default": true
+            },
+            "lowConfidence": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 500,
+          "maximum": 12000,
+          "default": 9000
+        }
+      },
+      "required": [
+        "models"
+      ]
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "autoAllow": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxRisk": {
+              "enum": [
+                "LOW",
+                "MEDIUM"
+              ],
+              "default": "LOW"
+            },
+            "minConfidence": {
+              "enum": [
+                "MEDIUM",
+                "HIGH"
+              ],
+              "default": "HIGH"
+            },
+            "allowedCategories": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 5,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "READ",
+                  "WRITE",
+                  "EXEC",
+                  "NETWORK",
+                  "STATE_CHANGE"
+                ]
+              },
+              "default": [
+                "READ"
+              ]
+            }
+          },
+          "required": [
+            "maxRisk",
+            "minConfidence",
+            "allowedCategories"
+          ]
+        },
+        "workspaceRoots": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 2048,
+            "pattern": "^/"
+          }
+        },
+        "alwaysAskPathPrefixes": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      },
+      "required": [
+        "autoAllow",
+        "workspaceRoots",
+        "alwaysAskPathPrefixes"
+      ]
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allowCommandTransmission": {
+          "type": "boolean"
+        },
+        "destinationReview": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 500
+        }
+      },
+      "required": [
+        "allowCommandTransmission",
+        "destinationReview"
+      ]
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hookDeadlineMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 25000,
+          "default": 8000
+        },
+        "llmTimeoutMs": {
+          "type": "integer",
+          "minimum": 500,
+          "maximum": 12000,
+          "default": 6500
+        },
+        "maxInFlight": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2,
+          "default": 2
+        },
+        "maxAssessmentsPerMinute": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 20
+        },
+        "maxCommandBytes": {
+          "type": "integer",
+          "minimum": 128,
+          "maximum": 4096,
+          "default": 4096
+        },
+        "maxResources": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "default": 8
+        },
+        "maxPayloadBytes": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 8192,
+          "default": 8192
+        },
+        "maxResponseBytes": {
+          "type": "integer",
+          "minimum": 256,
+          "maximum": 8192,
+          "default": 8192
+        }
+      },
+      "required": [
+        "hookDeadlineMs",
+        "llmTimeoutMs",
+        "maxInFlight",
+        "maxAssessmentsPerMinute",
+        "maxCommandBytes",
+        "maxResources",
+        "maxPayloadBytes",
+        "maxResponseBytes"
+      ]
+    },
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2048,
+          "pattern": "^/"
+        },
+        "maxFileBytes": {
+          "type": "integer",
+          "minimum": 65536,
+          "maximum": 5242880,
+          "default": 5242880
+        },
+        "retainedFiles": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3,
+          "default": 3
+        }
+      },
+      "required": [
+        "directory",
+        "maxFileBytes",
+        "retainedFiles"
+      ]
+    },
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "llmTrace": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "directory": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 2048,
+              "pattern": "^/"
+            },
+            "maxFileBytes": {
+              "type": "integer",
+              "minimum": 65536,
+              "maximum": 52428800,
+              "default": 5242880
+            },
+            "retainedFiles": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "default": 7
+            }
+          },
+          "required": [
+            "enabled"
+          ]
+        }
+      },
+      "required": [
+        "llmTrace"
+      ]
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "mode",
+    "model",
+    "policy",
+    "privacy",
+    "limits",
+    "audit"
+  ]
+}

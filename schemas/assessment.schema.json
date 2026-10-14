@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Reviewer assessment — project contract v2",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "risk": {
+      "enum": [
+        "LOW",
+        "MEDIUM",
+        "HIGH",
+        "CRITICAL",
+        "UNKNOWN"
+      ]
+    },
+    "categories": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "READ",
+          "WRITE",
+          "EXEC",
+          "NETWORK",
+          "STATE_CHANGE",
+          "UNKNOWN"
+        ]
+      }
+    },
+    "confidence": {
+      "enum": [
+        "LOW",
+        "MEDIUM",
+        "HIGH"
+      ]
+    },
+    "signals": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "SECRET_LIKE",
+          "DESTRUCTIVE",
+          "PRIVILEGE",
+          "NETWORK_EGRESS",
+          "INJECTION_ATTEMPT",
+          "AMBIGUOUS_SYNTAX",
+          "UNPARSED_SEGMENT",
+          "SCOPE_ESCAPE",
+          "OTHER"
+        ]
+      }
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "risk",
+    "categories",
+    "confidence",
+    "signals",
+    "summary"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "signals": {
+            "type": "array",
+            "contains": {
+              "enum": [
+                "SECRET_LIKE",
+                "DESTRUCTIVE",
+                "PRIVILEGE",
+                "NETWORK_EGRESS",
+                "INJECTION_ATTEMPT"
+              ]
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "risk": {
+            "enum": [
+              "MEDIUM",
+              "HIGH",
+              "CRITICAL"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "risk": {
+            "const": "LOW"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "signals": {
+            "type": "array",
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "risk": {
+            "const": "UNKNOWN"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "confidence": {
+            "const": "LOW"
+          },
+          "categories": {
+            "type": "array",
+            "contains": {
+              "const": "UNKNOWN"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

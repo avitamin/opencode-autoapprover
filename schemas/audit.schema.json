@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Minimized local audit record — project contract v2",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "timestamp": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 50,
+      "format": "date-time"
+    },
+    "requestID": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "inputFingerprint": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "mode": {
+      "enum": [
+        "off",
+        "shadow",
+        "auto"
+      ]
+    },
+    "outcome": {
+      "enum": [
+        "skipped",
+        "ask",
+        "shadow_would_allow",
+        "allow_prepared"
+      ]
+    },
+    "reasonCode": {
+      "enum": [
+        "RISK_WITHIN_THRESHOLD",
+        "NATIVE_ALLOW",
+        "NATIVE_DENY",
+        "UNKNOWN_ACTION",
+        "MODE_OFF",
+        "SHADOW_MODE",
+        "KILL_SWITCH",
+        "CONFIG_INVALID",
+        "HOST_UNVERIFIED",
+        "PLUGIN_CONFLICT",
+        "INPUT_UNBOUND",
+        "INPUT_MISMATCH",
+        "SECRET_DETECTED",
+        "OUTSIDE_SCOPE",
+        "PRIVACY_BLOCKED",
+        "PAYLOAD_TOO_LARGE",
+        "INVALID_RESPONSE",
+        "RISK_ABOVE_THRESHOLD",
+        "CONFIDENCE_BELOW_MINIMUM",
+        "CATEGORY_NOT_ALLOWED",
+        "MODEL_UNAVAILABLE",
+        "PROVIDER_ERROR",
+        "PROVIDER_CHANGED",
+        "TIMEOUT",
+        "CANCELLED",
+        "UNLOAD",
+        "SNAPSHOT_CHANGED",
+        "RATE_LIMIT",
+        "CONCURRENCY_LIMIT",
+        "MEMORY_LIMIT",
+        "DUPLICATE_EVENT",
+        "AUDIT_ERROR",
+        "UNSUPPORTED_PLATFORM",
+        "CIRCUIT_OPEN",
+        "INTERNAL_ERROR"
+      ]
+    },
+    "model": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "providerID": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "variant": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          "required": [
+            "providerID",
+            "id"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "latencyMs": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 86400000
+    },
+    "policyVersion": {
+      "const": "graduated-v1"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "timestamp",
+    "requestID",
+    "inputFingerprint",
+    "mode",
+    "outcome",
+    "reasonCode",
+    "model",
+    "latencyMs",
+    "policyVersion"
+  ]
+}
