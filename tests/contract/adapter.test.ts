@@ -182,10 +182,10 @@ describe("wired guard end-to-end on the fake host surface", () => {
     expect(w.reviewer.calls[0]?.command).toBe("cd . && printf probe_cd")
   })
 
-  // Regression (D5): real harness commands from trace-2026-10-14.jsonl that
-  // carried documented envelope keys (timeout/background) and were wrongly
-  // stopped as INPUT_MISMATCH before the fix.
-  test("harness shell calls with envelope keys reach the reviewer (trace fixtures 14.10)", async () => {
+  // Regression (D5): harness shell calls carrying documented envelope keys
+  // (timeout/background) were wrongly stopped as INPUT_MISMATCH before the fix.
+  // Shape mirrors the 14.10 trace events; values are synthetic.
+  test("harness shell calls with envelope keys reach the reviewer (trace-shaped fixtures)", async () => {
     const scripted = new ScriptedReviewer([ScriptedReviewer.text(CONFORMING_LOW), ScriptedReviewer.text(CONFORMING_LOW)])
     const w = await wired({ makeReviewer: () => scripted })
     await w.state.before(
@@ -201,12 +201,12 @@ describe("wired guard end-to-end on the fake host surface", () => {
       sdkBeforeEvent({
         id: "call_2",
         messageID: "msg_2",
-        input: { command: "docker rm -f cms-test-agent-1-db-host-1 && make test-up 2>&1 | tail -12", workdir: TEST_ROOT, background: true },
+        input: { command: "docker rm -f demo-app-db-1 && make test-up 2>&1 | tail -12", workdir: TEST_ROOT, background: true },
       }),
     )
     const make = sdkEvaluateEvent({
       source: { type: "tool", messageID: "msg_2", id: "call_2" },
-      resources: ["docker rm -f cms-test-agent-1-db-host-1", "make test-up", "tail -12"],
+      resources: ["docker rm -f demo-app-db-1", "make test-up", "tail -12"],
     })
     await w.state.evaluate(make)
     expect(make.effect).toBe("allow")
