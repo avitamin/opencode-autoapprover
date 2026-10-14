@@ -5,6 +5,16 @@
     "providerID": "REPLACE_ME_PROVIDER_ID",
     "id": "REPLACE_ME_MODEL_ID"
   },
+  "escalation": {
+    "models": [
+      {
+        "providerID": "REPLACE_ME_ESCALATION_PROVIDER_ID",
+        "id": "REPLACE_ME_ESCALATION_MODEL_ID"
+      }
+    ],
+    "timeoutMs": 9000,
+    "allowedCategories": ["READ", "EXEC"]
+  },
   "policy": {
     "autoAllow": {
       "maxRisk": "LOW",

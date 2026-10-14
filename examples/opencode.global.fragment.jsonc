@@ -10,7 +10,7 @@
     // (проверено host-smoke opencode v2.0.18: файловый путь отклоняется
     // предупреждением «configured plugin path must be a directory»).
     // Путь — абсолютный (хост не разворачивает «~»); пример установки
-    // по INSTALL.md: "/home/<user>/.local/share/opencode-llm-approval-v2.1.0/opencode-llm-approval"
+    // по INSTALL.md: "/home/<user>/.local/share/opencode-llm-approval-v2.7.1/opencode-llm-approval"
     "/REPLACE_ME_PATH/opencode-llm-approval"
   ],
   "permissions": [
