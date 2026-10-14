@@ -237,7 +237,20 @@ describe("loadGuardConfig", () => {
       ).toBe("inactive")
       expect(loadGuardConfig(depsFor(validConfigText({ escalation: { models: [HIGH_MODEL], retry: true } }))).status).toBe("inactive")
       expect(
-        loadGuardConfig(depsFor(validConfigText({ escalation: { models: [HIGH_MODEL], timeoutMs: 12001 }, limits: limitsWith({ hookDeadlineMs: 25000 }) }))).status,
+        loadGuardConfig(depsFor(validConfigText({ escalation: { models: [HIGH_MODEL], timeoutMs: 30001 }, limits: limitsWith({ hookDeadlineMs: 40000 }) }))).status,
+      ).toBe("inactive")
+    })
+
+    test("stage timeout ceilings are 30000 (D6)", () => {
+      // llmTimeoutMs boundary: 30000 fits a 40000 hook deadline (>=500ms reserve), 30001 exceeds the schema cap.
+      expect(loadGuardConfig(depsFor(validConfigText({ limits: limitsWith({ hookDeadlineMs: 40000, llmTimeoutMs: 30000 }) }))).status).toBe("active")
+      expect(loadGuardConfig(depsFor(validConfigText({ limits: limitsWith({ hookDeadlineMs: 40000, llmTimeoutMs: 30001 }) }))).status).toBe("inactive")
+      // escalation.timeoutMs boundary: chain 6500 + 30000 = 36500 fits the 40000 hook deadline.
+      expect(
+        loadGuardConfig(depsFor(validConfigText({ escalation: { models: [HIGH_MODEL], timeoutMs: 30000 }, limits: limitsWith({ hookDeadlineMs: 40000 }) }))).status,
+      ).toBe("active")
+      expect(
+        loadGuardConfig(depsFor(validConfigText({ escalation: { models: [HIGH_MODEL], timeoutMs: 30001 }, limits: limitsWith({ hookDeadlineMs: 40000 }) }))).status,
       ).toBe("inactive")
     })
 

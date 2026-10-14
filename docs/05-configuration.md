@@ -18,7 +18,7 @@ Runtime config guard: `${XDG_CONFIG_HOME:-$HOME/.config}/opencode-llm-approval/c
 | `model.variant` | Необязательный реально существующий variant; неизвестный → ошибка настройки |
 | `escalation.models` | Опциональная цепочка из 1–2 моделей; отсутствие секции — одиночная оценка на `model` (поведение по умолчанию) |
 | `escalation.triggerOn` | Флаги триггеров `unknownRisk` / `invalidResponse` / `lowConfidence`; каждый дефолт `true` |
-| `escalation.timeoutMs` | Бюджет ступени эскалации 500–12 000 мс; дефолт 9 000 |
+| `escalation.timeoutMs` | Бюджет ступени эскалации 500–30 000 мс; дефолт 9 000 |
 | `policy.autoAllow.maxRisk` | Максимальный разрешаемый риск: `LOW` или `MEDIUM`; дефолт `LOW`. HIGH/CRITICAL/UNKNOWN структурно неразрешимы |
 | `policy.autoAllow.minConfidence` | Минимальная уверенность ответа: `MEDIUM` или `HIGH`; дефолт `HIGH`. LOW структурно неразрешим |
 | `policy.autoAllow.allowedCategories` | Непустой набор категорий, попадающих под автоапрув; дефолт `[READ]`. Категория `UNKNOWN` структурно неразрешима |
@@ -26,7 +26,7 @@ Runtime config guard: `${XDG_CONFIG_HOME:-$HOME/.config}/opencode-llm-approval/c
 | `policy.alwaysAskPathPrefixes` | Дополнительные workspace-relative literal paths; только ужесточают built-in exclusions |
 | `privacy.allowCommandTransmission` | Явное согласие на минимальный model payload; изначально false |
 | `privacy.destinationReview` | Операторская запись, какой endpoint/account/API-key provider проверен; не enforcement network pin |
-| `limits.*` | Hook/LLM deadline, размеры, частота, in-flight; значения не выше ceilings схемы. `hookDeadlineMs`: 1 000–120 000 мс, дефолт 8 000; 120 000 — зашитый абсолютный максимум схемы и кода, конфигом не перезаписывается |
+| `limits.*` | Hook/LLM deadline, размеры, частота, in-flight; значения не выше ceilings схемы. `hookDeadlineMs`: 1 000–120 000 мс, дефолт 8 000; 120 000 — зашитый абсолютный максимум схемы и кода, конфигом не перезаписывается. `llmTimeoutMs`: 500–30 000 мс, дефолт 6 500; бюджет цепочки обязан влезать в hook-бюджет |
 | `audit.directory` | Абсолютный локальный каталог вне workspace; 0700, JSONL files 0600 |
 | `audit.maxFileBytes`, `audit.retainedFiles` | Rotation: текущий + заданное максимальное общее число файлов |
 | `diagnostics.llmTrace.enabled` | Opt-in полный трейс LLM-оценок; отсутствие секции или `false` — трейса нет (поведение по умолчанию) |

@@ -78,7 +78,7 @@
         "timeoutMs": {
           "type": "integer",
           "minimum": 500,
-          "maximum": 12000,
+          "maximum": 30000,
           "default": 9000
         }
       },
@@ -193,7 +193,7 @@
         "llmTimeoutMs": {
           "type": "integer",
           "minimum": 500,
-          "maximum": 12000,
+          "maximum": 30000,
           "default": 6500
         },
         "maxInFlight": {
