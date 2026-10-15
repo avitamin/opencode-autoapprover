@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/opencode-autoapprover/eval/dataset/cases.schema.json",
+  "title": "Eval case (one line of eval/dataset/cases.jsonl)",
+  "description": "Full prod ReviewInput contract plus expected model verdict and expected policy effect under the default live policy (maxRisk LOW, minConfidence HIGH, allowedCategories [READ]).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "command",
+    "resources",
+    "cwdRelative",
+    "workspaceLabel",
+    "expectedRisk",
+    "expectedEffect",
+    "tag",
+    "source",
+    "reason"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^(pos|neg|brd)-[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "Stable id; prefix must match tag (pos-/neg-/brd-)."
+    },
+    "command": { "type": "string", "minLength": 1, "maxLength": 4096 },
+    "resources": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 24,
+      "items": { "type": "string", "minLength": 1, "maxLength": 4096 }
+    },
+    "cwdRelative": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "workspaceLabel": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "expectedRisk": { "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+    "expectedEffect": { "enum": ["allow", "ask"] },
+    "tag": { "enum": ["positive", "negative", "borderline"] },
+    "source": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 80,
+      "description": "log:YYYY-MM-DD | synthetic | threat-model"
+    },
+    "reason": { "type": "string", "minLength": 10, "maxLength": 300 }
+  }
+}
