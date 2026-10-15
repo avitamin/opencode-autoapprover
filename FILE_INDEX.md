@@ -58,6 +58,14 @@
 | [tests/manual/opencode-smoke.md](tests/manual/opencode-smoke.md) | 10 ручных smoke-сценариев для реального хоста. |
 | [tests/manual/m4-harness-index.ts](tests/manual/m4-harness-index.ts) | M4 harness-плагин: packaged-модули + подменный scripted generate, трейсы вызовов; копируется в staged-среду скриптом упаковки. |
 | [scripts/make-package.ts](scripts/make-package.ts) | M4/M5 упаковка: staged-копия плагина вне рабочего дерева (dist, prompts, prod-deps, index.ts-шим) + сценарные скрипты для харнесса. |
+| [scripts/eval/ask-funnel.ts](scripts/eval/ask-funnel.ts) | Eval-этап 1: read-only агрегатор ask-воронки по живым audit/trace-логам (нормализация путей, отчёт в stdout). |
+| [scripts/eval/gen-dataset.ts](scripts/eval/gen-dataset.ts) | Eval-этап 2: источник датасета (TS) и генератор `eval/dataset/cases.jsonl` с `--check` против дрейфа; сканер-подобная сегментация resources. |
+| [scripts/eval/run-eval.ts](scripts/eval/run-eval.ts) | Eval-этап 3/4: прогон датасета через прод-контур (buildReviewerPrompt → stateless generate → parseAssessmentText → mapAssessmentToThreshold); hard gate false-allow=0; Basic-auth локального сервиса из service.json, секрет не логируется. |
+| [eval/analysis/ask-funnel-2026-10-14.md](eval/analysis/ask-funnel-2026-10-14.md) | Анализ: что падает в ask и что не должно (политика vs пайплайн vs вердикт модели); вход positive/negative/borderline. |
+| [eval/dataset/cases.jsonl](eval/dataset/cases.jsonl) | 100 eval-кейсов (35/44/21) с полным ReviewInput-контрактом и ожиданиями; команды — данные, не исполняются. |
+| [eval/dataset/cases.schema.json](eval/dataset/cases.schema.json) | Схема eval-кейса (id/теги/ожидания/источник). |
+| [tests/unit/eval-dataset.test.ts](tests/unit/eval-dataset.test.ts) | Контракт датасета: схема, баланс, когерентность ожиданий, приватность, DTO-conformance. |
+| [eval/results/](eval/results/) | Redacted отчёты прогонов (md) и raw JSON (сырые тексты только у не-пройденных кейсов). |
 
 ## Код плагина и offline-тесты (M1, 28.09.2026)
 
@@ -65,7 +73,7 @@
 
 | Файл | Назначение |
 |---|---|
-| [package.json](package.json) | Пакет `opencode-llm-approval` v2.7.1, scripts `typecheck/test/build/check/test:contract/test:live`. |
+| [package.json](package.json) | Пакет `opencode-llm-approval` v2.7.1, scripts `typecheck/test/build/check/test:contract/test:live` + `eval:funnel/eval:dataset/eval:run` (eval не входит в runtime-пакет). |
 | [tsconfig.json](tsconfig.json) | Strict TS для src+tests (noUncheckedIndexedAccess, exactOptionalPropertyTypes, verbatimModuleSyntax). |
 | [tsconfig.build.json](tsconfig.build.json) | Emit `dist/` для упаковки. |
 | [bun.lock](bun.lock) | Точные версии зависимостей (282 пакета). |

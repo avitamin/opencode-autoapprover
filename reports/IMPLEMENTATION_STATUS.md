@@ -185,6 +185,13 @@ Packaged host smoke с mock generation (без живой модели и без
 - **Проверки**: `bun run check` — typecheck + **415/415** (+2) + build — PASS. Пакет 2.5.0 → 2.6.0.
 - **Ограничения**: фикс 1 меняет поведение janitor'а — staged-копия v2.5.0 (живая) его ещё не содержит; обновление до v2.6.0 вместе со следующей задачей (maxResources) одной активацией.
 
+## Eval-стенд и первый прогон DeepSeek v4.1 Flash @ AliBaba (15.10.2026)
+
+- **Состав** (вне runtime-пакета, версия плагина не менялась): `scripts/eval/ask-funnel.ts` + `eval/analysis/ask-funnel-2026-10-14.md` (что падает в ask: политика OUTSIDE_SCOPE 613 + закрытые пайплайн-блокеры D5–D8 vs модельные 34+3); `eval/dataset/cases.jsonl` — 100 кейсов (35 positive / 44 negative / 21 borderline) со схемой и 6 контракт-тестами, источник `scripts/eval/gen-dataset.ts` с `--check`; `scripts/eval/run-eval.ts` — раннер прод-точности (DTO по review-input-схеме → `buildReviewerPrompt` + `prompts/reviewer-system.txt` → stateless `POST /api/experimental/generate` → `parseAssessmentText` → `mapAssessmentToThreshold` с живой политикой LOW/HIGH/[READ]; лимиты 30 c / 20 в мин / concurrency 2; Basic-auth локального сервиса из `service.json`, пароль не логируется; hard gate false-allow=0 → exit 1).
+- **Прогон `alibaba-token-plan/deepseek-v4.1-flash`** (живая подписка AliBaba, не живой guard-провайдер): **hard gate 0/44 — PASS** (включая prompt-injection и обфускацию); accuracy 96/100 (positive 32/35, negative 44/44, borderline 20/21); 3 false-ask — все LOW/HIGH-conf с EXEC-категорией ⇒ D7-эскалационно-совместимы (на живой политике трение 0/35); 2 timeout (30 c, `docker build`/`node -e`) → fail-closed ask; латентность p50 4.7 c / p95 16.5 c / max 22.8 c. Отчёты: `eval/results/2026-10-15-alibaba-token-plan-deepseek-v4.1-flash.md` + raw; evidence: `local/evidence/evidence-eval-alibaba-2026-10-15.md`.
+- **Ограничения / следующий шаг**: positive-сет 35 кейсов — расширяем через gen-dataset; baseline-проход живой `deepseek/deepseek-flash` не выполнялся (решение оператора); сравнение с живой воронкой — историческое. Кандидат на модель guard — решение оператора: смена `model.providerID/id` + квалификация host/provider по docs/03 и compatibility/README; потолки и gates не меняются.
+
+
 ## D8 — потолок maxResources 32 (14.10.2026)
 
 - **Мотивация**: после D5–D7 остаточный объёмный стоп — `PAYLOAD_TOO_LARGE`: 8 событий за 14.10, все `llm:false` (preflight), `resources: 9–22`. Режет именно `limits.maxResources: 8` (максимум схемы), не `maxPayloadBytes`: паттерн — git-команды со многими pathspec-операндами и составные команды (`git branch -M … && git log --format …` с 22 ресурсами).
