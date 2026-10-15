@@ -22,6 +22,7 @@
  *       [--dry-run]
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { homedir } from "node:os"
 import { join } from "node:path"
 import { buildReviewerPrompt } from "../../src/opencode/generate-reviewer.js"
 import { parseAssessmentText } from "../../src/assessment.js"
@@ -70,12 +71,43 @@ interface CaseResult {
 interface Options {
   readonly model: { readonly providerID: string; readonly id: string; readonly variant?: string }
   readonly server: string
+  readonly authorization: string | null
   readonly tag: EvalCase["tag"] | null
   readonly limit: number
   readonly timeoutMs: number
   readonly ratePerMin: number
   readonly concurrency: number
   readonly dryRun: boolean
+}
+
+interface ServiceInfo {
+  readonly hostname?: string
+  readonly port?: number
+  readonly password?: string
+}
+
+/**
+ * Local server discovery and auth (the same mechanism built-in clients use):
+ * ~/.config/opencode/service.json carries hostname/port/password for the
+ * background service. The password is used in-process only — never logged,
+ * never written to results.
+ */
+function resolveServer(flagServer: string | undefined): { server: string; authorization: string | null } {
+  let info: ServiceInfo = {}
+  try {
+    info = JSON.parse(readFileSync(join(homedir(), ".config", "opencode", "service.json"), "utf8")) as ServiceInfo
+  } catch {
+    // No local service file: plain server URL without auth.
+  }
+  const server =
+    flagServer ??
+    process.env["OPENCODE_SERVER"] ??
+    (info.hostname !== undefined && info.port !== undefined ? `http://${info.hostname}:${info.port}` : "http://127.0.0.1:4096")
+  const authorization =
+    typeof info.password === "string" && info.password.length > 0
+      ? `Basic ${Buffer.from(`opencode:${info.password}`).toString("base64")}`
+      : null
+  return { server: server.replace(/\/$/, ""), authorization }
 }
 
 function parseModel(ref: string): Options["model"] {
@@ -103,9 +135,11 @@ function parseArgs(): Options {
   if (tag !== undefined && !["positive", "negative", "borderline"].includes(tag)) {
     throw new Error(`--tag must be positive|negative|borderline, got: ${tag}`)
   }
+  const { server, authorization } = resolveServer(opt("--server"))
   return {
     model: parseModel(opt("--model") ?? "alibaba-token-plan/deepseek-v4.1-flash"),
-    server: (opt("--server") ?? process.env["OPENCODE_SERVER"] ?? "http://127.0.0.1:4096").replace(/\/$/, ""),
+    server,
+    authorization,
     tag: (tag as EvalCase["tag"] | undefined) ?? null,
     limit: num("--limit", Number.POSITIVE_INFINITY),
     timeoutMs: num("--timeout-ms", 30_000),
@@ -155,7 +189,10 @@ async function callGenerate(options: Options, prompt: string): Promise<{ ok: tru
     }
     const response = await fetch(`${options.server}/api/experimental/generate`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(options.authorization !== null ? { authorization: options.authorization } : {}),
+      },
       body: JSON.stringify(body),
       signal: controller.signal,
     })
