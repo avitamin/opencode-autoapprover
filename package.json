@@ -11,6 +11,9 @@
     "build": "node node_modules/typescript/lib/tsc.js -p tsconfig.build.json",
     "check": "bun run typecheck && bun run test && bun run build",
     "test:contract": "bun test tests/contract tests/corpus",
+    "eval:funnel": "bun scripts/eval/ask-funnel.ts",
+    "eval:dataset": "bun scripts/eval/gen-dataset.ts",
+    "eval:run": "bun scripts/eval/run-eval.ts",
     "test:live": "echo 'live model evaluation requires explicit operator consent (docs/08-testing.md); intentionally not part of check' && exit 1"
   },
   "dependencies": {
