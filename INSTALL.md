@@ -6,7 +6,7 @@
 
 | Компонент | Версия | Примечание |
 |---|---|---|
-| OpenCode host | **v2.0.18** | контрактовано в `compatibility/host-contract.json`; smoke P1/P2 дополнительно прошёл на v2.0.19 (авто-обновление desktop) — протокол в локальном evidence оператора |
+| OpenCode host | **v2.0.18** | контрактовано в `compatibility/host-contract.json`; smoke P1/P2 дополнительно прошёл на v2.0.19 (авто-обновление desktop) — протокол в локальном evidence оператора; адресный smoke на v2.0.32 (Windows 11, standalone + живой Desktop-сервис) — PASS 19.10.2026 (D10) |
 | `@opencode/plugin` (SDK) | **2.0.18** | точный pin в `package.json`; lockfile `bun.lock` |
 | ajv | **8.20.0** | единственная runtime-зависимость кроме SDK |
 | Bun (сборка/тесты) | **1.4.2** | не нужен на хосте после установки |
@@ -21,12 +21,12 @@
 ```bash
 # в клоне репозитория (однократно):
 bun install
-bun run check          # typecheck + 419 offline-тестов + build; без сети и ключей
+bun run check          # typecheck + 448 offline-тестов + build; без сети и ключей
 
 # упаковка staged-копии вне рабочего дерева:
 bun run build
-bun scripts/make-package.ts --stage ~/.local/share/opencode-llm-approval-v2.7.1
-cd ~/.local/share/opencode-llm-approval-v2.7.1/opencode-llm-approval
+bun scripts/make-package.ts --stage ~/.local/share/opencode-llm-approval-v2.8.3
+cd ~/.local/share/opencode-llm-approval-v2.8.3/opencode-llm-approval
 bun install --production
 ```
 
@@ -46,7 +46,7 @@ bun install --production
 - **policy.workspaceRoots** — корни, внутри которых guard работает вообще (cwd вне корня → ask без LLM).
 - **policy.alwaysAskPathPrefixes** — чувствительные префиксы путей (локальный стоп до LLM).
 - **privacy.allowCommandTransmission** — согласие на передачу текста команды модели. `false` = guard работает, но любая оценка заканчивается `PRIVACY_BLOCKED` → ask. В `shadow`/`auto` должно быть осознанное `true`; `destinationReview` — ваша запись, куда и на какой аккаунт уходит payload.
-- **limits**: `hookDeadlineMs` 8000 (настраивается в 1000–120000; 120000 — зашитый максимум схемы и кода, конфигом не перезаписывается); `llmTimeoutMs` — потолок 30000 (дефолт 6500), закладывайте с запасом по латентности вашего провайдера (живые замеры оператора — локальный evidence) либо выбирайте более быструю модель ревьюера; `maxResources` — потолок 32 (дефолт 8): поднимайте, если безвредные команды с многими путями (git с pathspec, составные) стопятся `PAYLOAD_TOO_LARGE`; бюджет цепочки `llmTimeoutMs + N × escalation.timeoutMs` обязан влезать в `hookDeadlineMs`; каждый TIMEOUT заканчивается безопасным `ask`.
+- **limits**: `hookDeadlineMs` 8000 (настраивается в 1000–120000; 120000 — зашитый максимум схемы и кода, конфигом не перезаписывается); `llmTimeoutMs` — потолок 30000 (дефолт 6500), закладывайте с запасом по латентности вашего провайдера (живые замеры оператора — локальный evidence) либо выбирайте более быструю модель ревьюера; `maxResources` — потолок 32 (дефолт 8): поднимайте, если безвредные команды с многими путями (git с pathspec, составные) стопятся `PAYLOAD_TOO_LARGE`; `maxInFlight` — потолок 8 (дефолт 2); бюджет цепочки `llmTimeoutMs + N × escalation.timeoutMs` обязан влезать в `hookDeadlineMs`; каждый TIMEOUT заканчивается безопасным `ask`. Превышение любого потолка даёт `CONFIG_INVALID` → guard полностью инертен (все ask, аудит молчит) — при тюнинге лимитов сверяйтесь с ceilings схемы и обновляйте dist вместе с конфигом.
 - **audit.directory** — каталог вне рабочих деревьев; ошибка записи аудита → `ask` (автоапрув без аудита невозможен).
 
 ### 3.1. Ручное переключение режима через Visual Studio Code
@@ -105,7 +105,7 @@ bun install --production
 - **Мягкий стоп**: `mode: "off"` в guard-конфиге + перезагрузка. Аудит продолжает писать `skipped`.
 - **Аваритный стоп процесса**: env `OPENCODE_LLM_APPROVAL_DISABLE=1` — guard полностью инертен.
 - **Снятие плагина**: удалить `plugins`-запись из конфига OpenCode. Персистентных permissions guard не создаёт — чистки allow-правил не требуется (ваши собственные правила не трогаются).
-- **Обновление сборки**: сохранить прежний staged-каталог и пару версий (host/SDK), развернуть новый, пройти п. 5.1–5.4 заново на своей фактической версии хоста. Не переписывать весь конфиг и не удалять credentials.
+- **Обновление сборки**: сохранить прежний staged-каталог и пару версий (host/SDK), развернуть новый, пройти п. 5.1–5.4 заново на своей фактической версии хоста. Не переписывать весь конфиг и не удалять credentials. С 2.8.1 валидация `alwaysAskPathPrefixes` ужесточена: ранее молча принимавшиеся Windows-формы вида `a\..\b`, `..\x`, `\secrets` теперь дают `CONFIG_INVALID` (видно в warn) — перед обновлением приведите префиксы к `/`-форме (`\` нормализуется автоматически, обходные последовательности — нет).
 
 ## 6. Честные границы (что НЕ проверено/не гарантируется)
 

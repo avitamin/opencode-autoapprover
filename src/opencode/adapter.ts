@@ -92,6 +92,19 @@ export interface GuardHostSurface {
   readonly model?: SdkModelListLike
 }
 
+/**
+ * Host-visible diagnostic for a non-active guard config (D10): an existing but
+ * invalid config silences the guard completely (noop audit, every decision ask)
+ * and left no trace in host logs for days. A missing config file
+ * (reason CONFIG_MISSING) is an intentional unconfigured install and is not
+ * warned about.
+ */
+export function inactiveConfigWarning(configState: GuardConfigState): string | null {
+  if (configState.status === "active") return null
+  if (configState.reason === "CONFIG_MISSING") return null
+  return `[opencode-llm-approval] guard is INACTIVE (${configState.reason}): ${configState.detail} — every permission decision falls back to ask; fix the guard config and reload the plugin`
+}
+
 export function toPermissionEventView(event: SdkPermissionEventLike): PermissionEventView {
   const source = event.source
   return {
@@ -202,6 +215,8 @@ export interface GuardWiringOverrides {
   /** Reviewer factory per chain model (primary first, then escalation stages). */
   readonly makeReviewer?: (config: GuardConfig, model: ModelRef) => ReviewerPort | null
   readonly makeTrace?: (config: GuardConfig) => TracePort | null
+  /** Host-log sink for the inactive-config warning; defaults to console.warn (D10/F8). */
+  readonly warn?: (message: string) => void
   readonly clock?: () => number
   readonly isoNow?: () => string
   readonly fingerprintSalt?: string
@@ -259,6 +274,12 @@ async function checkModelAvailable(
 export async function wireGuard(surface: GuardHostSurface, overrides: GuardWiringOverrides = {}): Promise<GuardWiring> {
   const env = () => process.env
   const configState = overrides.configState ?? loadGuardConfig(realConfigDeps(process.env))
+  const warn = overrides.warn ?? ((message: string) => console.warn(message))
+  const configWarning = inactiveConfigWarning(configState)
+  if (configWarning !== null) {
+    // Host-log visibility only; never blocks wiring (an inactive guard is fail-closed anyway).
+    warn(configWarning)
+  }
   const clock = overrides.clock ?? Date.now
   const configHome = resolveConfigPath(process.env)
   const guardConfigDirs = [dirname(configHome), dirname(dirname(configHome))]

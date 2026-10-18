@@ -157,7 +157,7 @@
             "type": "string",
             "minLength": 2,
             "maxLength": 2048,
-            "pattern": "^/"
+            "pattern": "^(?:/|[A-Za-z]:[\\\\/])"
           }
         },
         "alwaysAskPathPrefixes": {
@@ -214,7 +214,7 @@
         "maxInFlight": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 2,
+          "maximum": 8,
           "default": 2
         },
         "maxAssessmentsPerMinute": {
@@ -267,7 +267,7 @@
           "type": "string",
           "minLength": 2,
           "maxLength": 2048,
-          "pattern": "^/"
+          "pattern": "^(?:/|[A-Za-z]:[\\\\/])"
         },
         "maxFileBytes": {
           "type": "integer",
@@ -303,7 +303,7 @@
               "type": "string",
               "minLength": 2,
               "maxLength": 2048,
-              "pattern": "^/"
+              "pattern": "^(?:/|[A-Za-z]:[\\\\/])"
             },
             "maxFileBytes": {
               "type": "integer",

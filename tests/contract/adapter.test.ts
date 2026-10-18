@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { toPermissionEventView, toToolSnapshot, wireGuard, type GuardHostSurface, type RegistrationLike, type SdkPermissionEventLike, type SdkToolBeforeEventLike } from "../../src/opencode/adapter.js"
+import { inactiveConfigWarning, toPermissionEventView, toToolSnapshot, wireGuard, type GuardHostSurface, type RegistrationLike, type SdkPermissionEventLike, type SdkToolBeforeEventLike } from "../../src/opencode/adapter.js"
 import { ScriptedReviewer } from "../../src/reviewer.js"
 import type { AuditPort, AuditRecord, Effect } from "../../src/types.js"
 import { CONFORMING_LOW, TEST_ROOT, makeConfig } from "../helpers.js"
@@ -259,13 +259,19 @@ describe("wired guard end-to-end on the fake host surface", () => {
     expect(event.effect).toBe("ask")
   })
 
-  test("inactive config leaves the host untouched", async () => {
-    const w = await wired({ configState: { status: "inactive", reason: "CONFIG_INVALID", detail: "test" } })
+  test("inactive config leaves the host untouched and warns the host log (F8)", async () => {
+    const warnings: string[] = []
+    const w = await wired({
+      configState: { status: "inactive", reason: "CONFIG_INVALID", detail: "test" },
+      warn: (message) => warnings.push(message),
+    })
     await w.state.before(sdkBeforeEvent())
     const event = sdkEvaluateEvent()
     await w.state.evaluate(event)
     expect(event.effect).toBe("ask")
     expect(w.reviewer.callCount).toBe(0)
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toContain("INACTIVE")
   })
 
   test("effect type after commit is exactly the allow literal", async () => {
@@ -276,5 +282,23 @@ describe("wired guard end-to-end on the fake host surface", () => {
     const effects: Effect[] = ["allow", "ask", "deny"]
     expect(effects).toContain(event.effect)
     expect(event.effect).toBe("allow")
+  })
+})
+
+describe("inactiveConfigWarning (D10)", () => {
+  test("active config → no warning", () => {
+    expect(inactiveConfigWarning({ status: "active", config: makeConfig() })).toBeNull()
+  })
+
+  test("missing config file → no warning (intentional unconfigured install)", () => {
+    expect(inactiveConfigWarning({ status: "inactive", reason: "CONFIG_MISSING", detail: "config file not found: /home/x/.config/opencode-llm-approval/config.json" })).toBeNull()
+  })
+
+  test("invalid existing config → warning carries reason and detail", () => {
+    const warning = inactiveConfigWarning({ status: "inactive", reason: "CONFIG_INVALID", detail: "config schema violation: /limits/maxInFlight must be <= 8" })
+    expect(warning).toContain("INACTIVE")
+    expect(warning).toContain("CONFIG_INVALID")
+    expect(warning).toContain("/limits/maxInFlight")
+    expect(warning).toContain("ask")
   })
 })

@@ -10,6 +10,17 @@
     "platform": "Linux x86_64 (Ubuntu 24.04)",
     "shell": "host-managed (probe-сессии через стандартный shell-инструмент агента)"
   },
+  "additionalQualifiedHosts": [
+    {
+      "recordedAt": "2026-10-19",
+      "version": "v2.0.32",
+      "binary": "Desktop-сервис (serve --service) + standalone CLI opencode-cli.exe 2.0.32-x64",
+      "sdkPackage": "@opencode/plugin 2.0.18 (prod-pin пакета; контракты 2.0.18 и 2.0.32 структурно идентичны — d.ts + trigger-код в бинарнике)",
+      "platform": "Windows 11 x64",
+      "qualification": "адресный smoke (compatibility/README п. про обновление), НЕ полный M0: pluginLoad PASS, nativeAsk PASS (evaluate на ask → запись аудита), nativeAllowUntouched PASS (evaluate на allow → NATIVE_ALLOW), packagedInstall PASS (v2.8.0 живой Desktop-сервис, reload-first, живые LLM-оценки в аудите); остальные checks — NOT_RUN",
+      "knownQuirks": "CLI 2.0.32 `plugin list` не отображает локальные конфиг-плагины (2.0.26 отображал) — истина: лог сервиса/аудит; standalone уважает XDG_CONFIG_HOME для глобального конфига хоста"
+    }
+  ],
   "fieldMapping": {
     "toolName": "event.tool === \"shell\" (ctx.tool.hook(\"execute.before\"))",
     "fullCommand": "tool.before event.input.command — ПОЛНАЯ raw-команда, включая compound; permission.resources НЕ являются полной командой (см. cdCompoundNoBypass)",
@@ -65,6 +76,7 @@
     "cd/prompt bypass (issue E9) на этой сборке/Linux НЕ наблюдён: evaluate вызывался для всех compound-команд.",
     "D5 (14.10.2026): harness-тулколлы хоста несут envelope-ключи timeout/background; до D5 адаптер считал известными только {command, workdir} — хронические INPUT_MISMATCH в agent-сессиях при чистом standalone (живой evidence оператора 14.10). Контракт расширен по схеме shell-тула квалифицированного хоста v2.0.18; появление нового ключа хоста — видимый стоп до пересмотра контракта.",
     "Cleanup-функция setup() вызывается при завершении run (записи «unloaded»; M4-трейс: dispose при каждом завершении run).",
-    "Драйвер run-сессий: без явного -m дефолтная модель может падать по лимитам аккаунта; с явным -m работает. Не полагаться на дефолтную модель в драйвере."
+    "Драйвер run-сессий: без явного -m дефолтная модель может падать по лимитам аккаунта; с явным -m работает. Не полагаться на дефолтную модель в драйвере.",
+    "D10 (19.10.2026): адресный host smoke на opencode v2.0.32 (Windows 11 x64; Desktop-сервис serve --service + standalone CLI 2.0.32): pluginLoad PASS, evaluate на ask (запись MODE_OFF) и на native allow (запись NATIVE_ALLOW) PASS, packaged-установка v2.8.0 в живом Desktop-сервисе PASS (reload-first, живые LLM-оценки в аудите). Контракт permission/tool-хуков не изменился (проверено и по d.ts SDK 2.0.32, и по коду trigger в бинарнике). Полный contract-корпус на 2.0.32 — NOT_RUN; квирк: `opencode plugin list` CLI 2.0.32 не отображает локальные плагины (в 2.0.26 отображал) — источник истины лог сервиса/аудит."
   ]
 }

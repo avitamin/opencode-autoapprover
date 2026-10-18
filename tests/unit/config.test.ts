@@ -5,6 +5,7 @@ import {
   effectiveEscalation,
   HOOK_DEADLINE_HARD_MAX_MS,
   loadGuardConfig,
+  normalizeAbsolutePath,
   resolveConfigPath,
   reviewerChain,
   type ConfigDeps,
@@ -53,13 +54,53 @@ describe("resolveConfigPath", () => {
     expect(resolveConfigPath({ HOME: "/home/a", XDG_CONFIG_HOME: "/xdg" })).toBe("/xdg/opencode-llm-approval/config.json")
     expect(resolveConfigPath({ HOME: "/home/a" })).toBe("/home/a/.config/opencode-llm-approval/config.json")
   })
+
+  test("USERPROFILE fallback when HOME is unset (Windows)", () => {
+    expect(resolveConfigPath({ USERPROFILE: "C:\\Users\\anton" })).toBe("C:\\Users\\anton/.config/opencode-llm-approval/config.json")
+    expect(resolveConfigPath({ USERPROFILE: "C:\\Users\\anton\\" })).toBe("C:\\Users\\anton/.config/opencode-llm-approval/config.json")
+  })
+
+  test("HOME wins over USERPROFILE when both are set", () => {
+    expect(resolveConfigPath({ HOME: "/home/a", USERPROFILE: "C:\\Users\\anton" })).toBe("/home/a/.config/opencode-llm-approval/config.json")
+  })
+})
+
+describe("normalizeAbsolutePath (Windows separators)", () => {
+  test("backslash, forward-slash and /C:/ drive forms canonicalize identically (case-folded)", () => {
+    expect(normalizeAbsolutePath("C:\\Users\\anton")).toBe("/c:/users/anton")
+    expect(normalizeAbsolutePath("C:/Users/anton")).toBe("/c:/users/anton")
+    expect(normalizeAbsolutePath("/C:/Users/anton")).toBe("/c:/users/anton")
+    expect(normalizeAbsolutePath("C:\\Users\\anton\\..\\Bob")).toBe("/c:/users/bob")
+  })
+
+  test("drive paths are case-insensitive, POSIX paths are not (R2)", () => {
+    expect(normalizeAbsolutePath("c:\\Users\\ANTON\\src")).toBe("/c:/users/anton/src")
+    expect(normalizeAbsolutePath("c:\\Users\\ANTON\\src")).toBe(normalizeAbsolutePath("C:/Users/anton/src"))
+    expect(normalizeAbsolutePath("/Home/Anton")).toBe("/Home/Anton")
+  })
+
+  test("POSIX behavior is unchanged", () => {
+    expect(normalizeAbsolutePath("/a/b/../c")).toBe("/a/c")
+    expect(normalizeAbsolutePath("/a//b/./c")).toBe("/a/b/c")
+  })
+
+  test("KNOWN LIMITATION (D10 review F4): '..' collapses across backslash on POSIX-looking paths", () => {
+    // A real POSIX directory literally named "..\a" is lexically collapsed into
+    // a traversal and can satisfy root matching without physically living in
+    // the root. Documented platform limitation (docs/05, IMPLEMENTATION_STATUS
+    // D10); feasible only when such a directory was deliberately created.
+    expect(normalizeAbsolutePath("/home/a3/..\\a/src")).toBe("/home/a/src")
+  })
 })
 
 describe("loadGuardConfig", () => {
   test("missing file → inactive guard", () => {
     const state = loadGuardConfig(depsFor(null))
     expect(state.status).toBe("inactive")
-    if (state.status === "inactive") expect(state.detail).toContain("not found")
+    if (state.status === "inactive") {
+      expect(state.reason).toBe("CONFIG_MISSING")
+      expect(state.detail).toContain("not found")
+    }
   })
 
   test("valid config → active and deeply frozen", () => {
@@ -97,6 +138,103 @@ describe("loadGuardConfig", () => {
   test("semantic: llmTimeout must leave 500ms before hookDeadline", () => {
     const state = loadGuardConfig(
       depsFor(validConfigText({ limits: { hookDeadlineMs: 6000, llmTimeoutMs: 5600, maxInFlight: 2, maxAssessmentsPerMinute: 20, maxCommandBytes: 4096, maxResources: 8, maxPayloadBytes: 8192, maxResponseBytes: 8192 } })),
+    )
+    expect(state.status).toBe("inactive")
+  })
+
+  test("windows: drive-letter roots and audit directory are schema-valid and active", () => {
+    const env = { USERPROFILE: "C:\\Users\\anton" }
+    const roots = ["C:/Users/anton/PhpstormProjects"]
+    const state = loadGuardConfig(
+      depsFor(
+        validConfigText({
+          policy: { autoAllow: { maxRisk: "LOW", minConfidence: "HIGH", allowedCategories: ["READ"] }, workspaceRoots: roots, alwaysAskPathPrefixes: [] },
+          audit: { directory: "C:/Users/anton/.local/state/opencode-llm-approval", maxFileBytes: 5242880, retainedFiles: 3 },
+        }),
+        { roots: [...roots, "C:/Users/anton/.local/state/opencode-llm-approval"], env },
+      ),
+    )
+    expect(state.status).toBe("active")
+  })
+
+  test("windows: native backslash roots and audit directory are schema-valid and active (D10 review F1)", () => {
+    // The JSON pattern previously decoded to a character class holding only "/",
+    // rejecting every "C:\…" path an operator pastes from Explorer.
+    const env = { USERPROFILE: "C:\\Users\\anton" }
+    const roots = ["C:\\Users\\anton\\PhpstormProjects"]
+    const state = loadGuardConfig(
+      depsFor(
+        validConfigText({
+          policy: { autoAllow: { maxRisk: "LOW", minConfidence: "HIGH", allowedCategories: ["READ"] }, workspaceRoots: roots, alwaysAskPathPrefixes: [] },
+          audit: { directory: "C:\\Users\\anton\\.local\\state\\opencode-llm-approval", maxFileBytes: 5242880, retainedFiles: 3 },
+        }),
+        { roots: [...roots, "C:\\Users\\anton\\.local\\state\\opencode-llm-approval"], env },
+      ),
+    )
+    expect(state.status).toBe("active")
+  })
+
+  test("windows: backslash alwaysAskPathPrefixes normalize to '/' and stay rejectable (D10 review F5)", () => {
+    const state = loadGuardConfig(
+      depsFor(
+        validConfigText({
+          policy: { autoAllow: { maxRisk: "LOW", minConfidence: "HIGH", allowedCategories: ["READ"] }, workspaceRoots: [TEST_ROOT], alwaysAskPathPrefixes: ["src\\secrets"] },
+        }),
+      ),
+    )
+    expect(state.status).toBe("active")
+    if (state.status === "active") {
+      expect(state.config.policy.alwaysAskPathPrefixes).toEqual(["src/secrets"])
+    }
+    // Normalization happens before validation: traversal becomes visible and is rejected.
+    expect(
+      loadGuardConfig(
+        depsFor(
+          validConfigText({
+            policy: { autoAllow: { maxRisk: "LOW", minConfidence: "HIGH", allowedCategories: ["READ"] }, workspaceRoots: [TEST_ROOT], alwaysAskPathPrefixes: ["a\\..\\b"] },
+          }),
+        ),
+      ).status,
+    ).toBe("inactive")
+  })
+
+  test("windows: an entire drive is not a valid workspace root (D10 review F6)", () => {
+    const env = { XDG_CONFIG_HOME: "D:\\xdg", HOME: undefined, USERPROFILE: "C:\\Users\\anton" }
+    const state = loadGuardConfig(
+      depsFor(
+        validConfigText({
+          policy: { autoAllow: { maxRisk: "LOW", minConfidence: "HIGH", allowedCategories: ["READ"] }, workspaceRoots: ["C:/"], alwaysAskPathPrefixes: [] },
+        }),
+        { roots: ["C:/"], env },
+      ),
+    )
+    expect(state.status).toBe("inactive")
+  })
+
+  test("windows: mixed-case duplicate drive roots are detected as nested (R2)", () => {
+    // Before case-folding, "C:/Users/anton/proj" and "c:\Users\anton\proj\SUB"
+    // normalized differently and hid the containment from the nesting rule.
+    const env = { USERPROFILE: "C:\\Users\\anton" }
+    const roots = ["C:/Users/anton/PhpstormProjects", "c:\\Users\\anton\\PhpstormProjects\\API"]
+    const state = loadGuardConfig(
+      depsFor(
+        validConfigText({
+          policy: { autoAllow: { maxRisk: "LOW", minConfidence: "HIGH", allowedCategories: ["READ"] }, workspaceRoots: roots, alwaysAskPathPrefixes: [] },
+        }),
+        { roots: [...roots, "C:/Users/anton/.local/state/opencode-llm-approval"], env },
+      ),
+    )
+    expect(state.status).toBe("inactive")
+  })
+
+  test("windows: entire home as root is rejected with USERPROFILE too", () => {
+    const env = { HOME: undefined, USERPROFILE: "C:\\Users\\anton" }
+    const roots = ["C:/Users/anton"]
+    const state = loadGuardConfig(
+      depsFor(
+        validConfigText({ policy: { autoAllow: { maxRisk: "LOW", minConfidence: "HIGH", allowedCategories: ["READ"] }, workspaceRoots: roots, alwaysAskPathPrefixes: [] } }),
+        { roots, env },
+      ),
     )
     expect(state.status).toBe("inactive")
   })
@@ -330,6 +468,13 @@ describe("loadGuardConfig", () => {
     test("D8: maxResources ceiling is 32", () => {
       expect(loadGuardConfig(depsFor(validConfigText({ limits: limitsWith({ maxResources: 32 }) }))).status).toBe("active")
       expect(loadGuardConfig(depsFor(validConfigText({ limits: limitsWith({ maxResources: 33 }) }))).status).toBe("inactive")
+    })
+
+    test("D10: maxInFlight ceiling is 8", () => {
+      // Operator tuning (16.10) raised maxInFlight past the old cap of 2 → CONFIG_INVALID
+      // silently disarmed the guard for three days. Ceiling lifted 2 → 8, default 2 unchanged.
+      expect(loadGuardConfig(depsFor(validConfigText({ limits: limitsWith({ maxInFlight: 8 }) }))).status).toBe("active")
+      expect(loadGuardConfig(depsFor(validConfigText({ limits: limitsWith({ maxInFlight: 9 }) }))).status).toBe("inactive")
     })
 
     test("hookDeadlineMs ceiling is a hard cap not overridable by config", () => {
