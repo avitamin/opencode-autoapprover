@@ -21,12 +21,12 @@
 ```bash
 # в клоне репозитория (однократно):
 bun install
-bun run check          # typecheck + 445 offline-тестов + build; без сети и ключей
+bun run check          # typecheck + 448 offline-тестов + build; без сети и ключей
 
 # упаковка staged-копии вне рабочего дерева:
 bun run build
-bun scripts/make-package.ts --stage ~/.local/share/opencode-llm-approval-v2.8.2
-cd ~/.local/share/opencode-llm-approval-v2.8.2/opencode-llm-approval
+bun scripts/make-package.ts --stage ~/.local/share/opencode-llm-approval-v2.8.3
+cd ~/.local/share/opencode-llm-approval-v2.8.3/opencode-llm-approval
 bun install --production
 ```
 

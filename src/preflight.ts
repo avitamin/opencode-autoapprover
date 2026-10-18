@@ -13,7 +13,7 @@ import type {
   ReviewInput,
   ToolSnapshot,
 } from "./types.js"
-import { normalizeAbsolutePath } from "./config.js"
+import { isDriveShapedPath, normalizeAbsolutePath } from "./config.js"
 
 export type PreflightFailureReason = Extract<
   ReasonCode,
@@ -51,14 +51,31 @@ function isAbsoluteLikePath(token: string): boolean {
   return token.startsWith("/") || token.startsWith("\\") || /^[A-Za-z]:[\\/]/.test(token)
 }
 
+/** Token lexically anchored to a Windows volume: drive prefix ("C:\", "C:/") or "\"-rooted. */
+function isWindowsAnchoredToken(token: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(token) || token.startsWith("\\")
+}
+
 /**
  * Lexical scan of command operands for sensitive path areas (docs/04 built-in
  * exclusions + operator prefixes + guard/OpenCode config dirs). This is NOT a
  * command grammar: tokens are split on whitespace, quotes stripped, components
  * matched whole on both "/" and "\" separators (Windows-compatible). It only
  * ever tightens (ask), never authorizes.
+ *
+ * Component/prefix comparison follows the filesystem the path lives on
+ * (commit-review N1): Windows-anchored tokens (drive prefix, "\"-rooted) and —
+ * under a drive-shaped evaluation cwd — every non-POSIX-absolute token
+ * (relative, "~", "%VAR%") are case-folded, so ".SSH"/"Secrets/" cannot slip
+ * past the stop on a case-insensitive filesystem. POSIX-absolute ("/…") tokens
+ * and non-drive cwd keep exact case.
  */
-export function commandTouchesSensitivePath(command: string, prefixes: readonly string[], guardConfigDirs: readonly string[]): boolean {
+export function commandTouchesSensitivePath(
+  command: string,
+  prefixes: readonly string[],
+  guardConfigDirs: readonly string[],
+  windowsFsContext = false,
+): boolean {
   for (const rawToken of command.split(/\s+/)) {
     const token = rawToken.replace(/^["']+/, "").replace(/["']+$/, "")
     if (token.length === 0) continue
@@ -69,13 +86,15 @@ export function commandTouchesSensitivePath(command: string, prefixes: readonly 
         if (normalizedToken === normalizedDir || normalizedToken.startsWith(`${normalizedDir}/`)) return true
       }
     }
+    const windowsFs = isWindowsAnchoredToken(token) || (windowsFsContext && !token.startsWith("/"))
     const components = token.split(/[\\/]/).filter((part) => part.length > 0)
-    if (components.some(isSensitiveComponent)) return true
+    if (components.some((component) => isSensitiveComponent(windowsFs ? component.toLowerCase() : component))) return true
     // Operator prefixes are workspace-relative: they apply to relative operand paths only.
     if (!isAbsoluteLikePath(token) && !token.startsWith("~")) {
       const first = components[0] ?? token
+      const firstCmp = windowsFs ? first.toLowerCase() : first
       for (const prefix of prefixes) {
-        if (first === prefix) return true
+        if (firstCmp === (windowsFs ? prefix.toLowerCase() : prefix)) return true
       }
     }
   }
@@ -235,7 +254,8 @@ export function runPreflight(
       return { ok: false, reason: "OUTSIDE_SCOPE" }
     }
   }
-  if (commandTouchesSensitivePath(snapshot.command, policy.alwaysAskPathPrefixes, options.guardConfigDirs)) {
+  const windowsFsContext = isDriveShapedPath(normalizedCwd)
+  if (commandTouchesSensitivePath(snapshot.command, policy.alwaysAskPathPrefixes, options.guardConfigDirs, windowsFsContext)) {
     return { ok: false, reason: "OUTSIDE_SCOPE" }
   }
 
@@ -244,12 +264,16 @@ export function runPreflight(
     return { ok: false, reason: "PRIVACY_BLOCKED" }
   }
 
+  // DTO labels (commit-review N2): workspaceLabel keeps the operator-written case
+  // (raw root string — unique after normalization thanks to the nesting rule);
+  // cwdRelative inherits the canonical (case-folded on Windows) form — risk-neutral.
+  const rawRoot = policy.workspaceRoots.find((r) => normalizeAbsolutePath(r) === root) ?? root
   const review: ReviewInput = {
     schemaVersion: 2,
     command: snapshot.command,
     resources: [...event.resources],
     cwdRelative: relativePath.length > 0 ? relativePath : ".",
-    workspaceLabel: root.split("/").filter((p) => p.length > 0).slice(-1)[0]!.slice(0, 80),
+    workspaceLabel: rawRoot.split(/[\\/]/).filter((p) => p.length > 0).slice(-1)![0]!.slice(0, 80),
     localFacts: { scopeAuthorized: true, commandComplete: true, sensitiveDataDetected: false },
   }
   if (utf8Bytes(JSON.stringify(review)) > limits.maxPayloadBytes) {

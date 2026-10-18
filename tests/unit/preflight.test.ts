@@ -84,6 +84,33 @@ describe("commandTouchesSensitivePath / resourcesConsistentWithCommand", () => {
     expect(commandTouchesSensitivePath('git grep -n "\\.ssh" .', PREFIXES, DIRS)).toBe(true)
   })
 
+  test("case follows the filesystem: Windows-anchored tokens fold, POSIX stays exact (N1)", () => {
+    // Drive-anchored tokens fold regardless of the evaluation cwd.
+    expect(commandTouchesSensitivePath("type C:\\Users\\example\\.SSH\\known_hosts", PREFIXES, DIRS)).toBe(true)
+    expect(commandTouchesSensitivePath("type C:\\Users\\example\\.AWS\\credentials", PREFIXES, DIRS)).toBe(true)
+    expect(commandTouchesSensitivePath("del C:\\Users\\example\\.KUBE\\config", PREFIXES, DIRS)).toBe(true)
+    expect(commandTouchesSensitivePath("type C:/Users/example/ID_RSA", PREFIXES, DIRS)).toBe(true)
+    expect(commandTouchesSensitivePath("type \\.SSH\\known_hosts", PREFIXES, DIRS)).toBe(true)
+    // "\"-rooted tokens are absolute-like: operator prefixes never apply to them
+    // (workspace-relative by design) — only builtin components do.
+    expect(commandTouchesSensitivePath("type \\Secrets\\token.txt", PREFIXES, DIRS)).toBe(false)
+    // POSIX-absolute tokens keep exact case everywhere.
+    expect(commandTouchesSensitivePath("cat /home/example/.SSH/known_hosts", PREFIXES, DIRS)).toBe(false)
+    expect(commandTouchesSensitivePath("cat /home/example/.ssh/known_hosts", PREFIXES, DIRS)).toBe(true)
+  })
+
+  test("relative operands fold under a drive-shaped cwd, stay strict on POSIX cwd (N1)", () => {
+    expect(commandTouchesSensitivePath("type %USERPROFILE%\\.ENV", PREFIXES, DIRS, true)).toBe(true)
+    expect(commandTouchesSensitivePath("type Secrets/token.txt", PREFIXES, DIRS, true)).toBe(true)
+    expect(commandTouchesSensitivePath("type PRODUCTION/settings.json", PREFIXES, DIRS, true)).toBe(true)
+    expect(commandTouchesSensitivePath("type SECRETS/token.txt", PREFIXES, DIRS, true)).toBe(true) // operator prefix folds too
+    expect(commandTouchesSensitivePath("cat Secrets/token.txt", PREFIXES, DIRS, false)).toBe(false)
+    expect(commandTouchesSensitivePath("cat secrets/token.txt", PREFIXES, DIRS, false)).toBe(true)
+    expect(commandTouchesSensitivePath("cat .ENV", PREFIXES, DIRS, false)).toBe(false)
+    // POSIX-absolute operands stay strict even under a Windows cwd.
+    expect(commandTouchesSensitivePath("cat /.SSH/known_hosts", PREFIXES, DIRS, true)).toBe(false)
+  })
+
   test("scanner resources must occur in the raw command", () => {
     expect(resourcesConsistentWithCommand(["cat README.md"], "cat README.md")).toBe(true)
     expect(resourcesConsistentWithCommand(["printf probe_cd"], "cd . && printf probe_cd")).toBe(true)
@@ -117,6 +144,21 @@ describe("runPreflight", () => {
       expect(result.review.localFacts).toEqual({ scopeAuthorized: true, commandComplete: true, sensitiveDataDetected: false })
       expect(JSON.stringify(result.review)).not.toContain("ses_")
       expect(JSON.stringify(result.review)).not.toContain(TEST_ROOT)
+    }
+  })
+
+  test("windows cwd: uppercase sensitive operands stop at preflight; DTO label keeps operator case (N1/N2)", () => {
+    const winPolicy = { ...config.policy, workspaceRoots: ["C:/Users/Anton/PhpstormProjects"], alwaysAskPathPrefixes: ["secrets", "credentials", "production"] }
+    const winOpts = { ...OPTS, effectiveCwd: "C:\\Users\\Anton\\PhpstormProjects\\API" }
+    const absCmd = "type C:\\Users\\example\\.SSH\\known_hosts"
+    expect(runPreflight(makeSnapshot({ command: absCmd }), makeEvent({ resources: [absCmd] }), winPolicy, config.limits, winOpts)).toMatchObject({ ok: false, reason: "OUTSIDE_SCOPE" })
+    const relCmd = "type PRODUCTION/settings.json"
+    expect(runPreflight(makeSnapshot({ command: relCmd }), makeEvent({ resources: [relCmd] }), winPolicy, config.limits, winOpts)).toMatchObject({ ok: false, reason: "OUTSIDE_SCOPE" })
+    const result = runPreflight(makeSnapshot(), makeEvent(), winPolicy, config.limits, winOpts)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.review.cwdRelative).toBe("api") // canonical folded form (docs/05, N2)
+      expect(result.review.workspaceLabel).toBe("PhpstormProjects") // operator-written case from the raw root (N2)
     }
   })
 

@@ -74,8 +74,18 @@ export function normalizeAbsolutePath(path: string): string {
     out.push(part)
   }
   const normalized = `/${out.join("/")}`
-  if (/^\/[A-Za-z]:($|\/)/.test(normalized)) return normalized.toLowerCase()
+  if (isDriveShapedPath(normalized)) return normalized.toLowerCase()
   return normalized
+}
+
+/**
+ * Canonical drive-shaped path: "/c:" or "/c:/…" — anchored to a Windows volume.
+ * Shared by normalization (case-fold) and the operand scan (filesystem case
+ * rules, commit-review N1). Drive shape is platform-independent: a literal
+ * POSIX directory named "C:" folds too — the documented R4 ambiguity.
+ */
+export function isDriveShapedPath(normalized: string): boolean {
+  return /^\/[A-Za-z]:($|\/)/.test(normalized)
 }
 
 function isInside(child: string, parent: string): boolean {
