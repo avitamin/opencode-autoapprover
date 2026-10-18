@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import Ajv2020 from "ajv/dist/2020.js"
 import configSchemaJson from "../../schemas/config.schema.json" with { type: "json" }
 import reviewInputSchemaJson from "../../schemas/review-input.schema.json" with { type: "json" }
-import { commandTouchesSensitivePath, detectSecretLike, resourcesConsistentWithCommand, runPreflight } from "../../src/preflight.js"
+import { commandTouchesSensitivePath, detectSecretLike, findWorkspaceRoot, resourcesConsistentWithCommand, runPreflight } from "../../src/preflight.js"
 import { GUARD_CONFIG_DIRS, TEST_ROOT, makeConfig, makeEvent, makeSnapshot } from "../helpers.js"
 import type { ToolSnapshot } from "../../src/types.js"
 
@@ -64,12 +64,45 @@ describe("commandTouchesSensitivePath / resourcesConsistentWithCommand", () => {
     expect(commandTouchesSensitivePath("cat secrets-notes/file", PREFIXES, DIRS)).toBe(false) // component boundary
   })
 
+  test("windows separators are caught lexically", () => {
+    const WIN_DIRS = ["C:\\Users\\example/.config/opencode-llm-approval", "C:\\Users\\example/.config/opencode"]
+    expect(commandTouchesSensitivePath("cat C:\\Users\\example\\.ssh\\id_rsa", PREFIXES, WIN_DIRS)).toBe(true)
+    expect(commandTouchesSensitivePath("type C:\\Users\\example\\.env", PREFIXES, WIN_DIRS)).toBe(true)
+    expect(commandTouchesSensitivePath("type C:/Users/example/.env.local", PREFIXES, WIN_DIRS)).toBe(true)
+    expect(commandTouchesSensitivePath("type C:\\Users\\example\\.config\\opencode\\auth.json", PREFIXES, WIN_DIRS)).toBe(true)
+    expect(commandTouchesSensitivePath("type C:/Users/example/.config/opencode/auth.json", PREFIXES, WIN_DIRS)).toBe(true)
+    expect(commandTouchesSensitivePath("type secrets\\token.txt", PREFIXES, WIN_DIRS)).toBe(true)
+    expect(commandTouchesSensitivePath("type C:\\Users\\example\\docs\\link.md", PREFIXES, WIN_DIRS)).toBe(false)
+  })
+
+  test("DELIBERATE TIGHTENING (D10 review F3): POSIX escape tokens hit the sensitive scan", () => {
+    // Since D9 the scan splits operands on both separators so Windows paths
+    // cannot dodge it. The price: POSIX regex escapes like "\.env" also expose
+    // their inner component and stop at preflight (ask without LLM). This is
+    // fail-closed by design — the stop only ever tightens; see docs/04.
+    expect(commandTouchesSensitivePath('grep -rn "\\.env" docs/', PREFIXES, DIRS)).toBe(true)
+    expect(commandTouchesSensitivePath('git grep -n "\\.ssh" .', PREFIXES, DIRS)).toBe(true)
+  })
+
   test("scanner resources must occur in the raw command", () => {
     expect(resourcesConsistentWithCommand(["cat README.md"], "cat README.md")).toBe(true)
     expect(resourcesConsistentWithCommand(["printf probe_cd"], "cd . && printf probe_cd")).toBe(true)
     expect(resourcesConsistentWithCommand(["rm -rf ./cache"], "cat README.md")).toBe(false)
     expect(resourcesConsistentWithCommand(["cat .env"], "cat README.md")).toBe(false)
     expect(resourcesConsistentWithCommand([], "cat README.md")).toBe(true)
+  })
+})
+
+describe("findWorkspaceRoot (Windows separators)", () => {
+  test("drive-letter root matches backslash and forward-slash cwd", () => {
+    expect(findWorkspaceRoot("C:\\Users\\anton\\PhpstormProjects\\api", ["C:/Users/anton/PhpstormProjects"])).toBe("/c:/users/anton/phpstormprojects")
+    expect(findWorkspaceRoot("C:/Users/anton/PhpstormProjects/api", ["C:\\Users\\anton\\PhpstormProjects"])).toBe("/c:/users/anton/phpstormprojects")
+    expect(findWorkspaceRoot("C:\\Users\\anton\\other", ["C:/Users/anton/PhpstormProjects"])).toBe(null)
+  })
+
+  test("mixed-case cwd/root still match after case-fold (R2)", () => {
+    expect(findWorkspaceRoot("c:\\Users\\ANTON\\PhpstormProjects\\api", ["C:/Users/anton/PhpstormProjects"])).toBe("/c:/users/anton/phpstormprojects")
+    expect(findWorkspaceRoot("C:\\Users\\anton\\other", ["c:/users/anton/PhpstormProjects"])).toBe(null)
   })
 })
 

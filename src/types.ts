@@ -156,7 +156,7 @@ export interface GuardConfig {
 /** Result of trusted-config loading. Missing or invalid file → inactive guard (all outcomes stay ask). */
 export type GuardConfigState =
   | { readonly status: "active"; readonly config: GuardConfig }
-  | { readonly status: "inactive"; readonly reason: "CONFIG_INVALID"; readonly detail: string }
+  | { readonly status: "inactive"; readonly reason: "CONFIG_INVALID" | "CONFIG_MISSING"; readonly detail: string }
 
 /**
  * Shell-tool envelope input values (docs/03, D5): documented host-contract keys

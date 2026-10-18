@@ -46,25 +46,33 @@ function isSensitiveComponent(component: string): boolean {
   return SENSITIVE_COMPONENTS.has(component) || component === ".env" || component.startsWith(".env.")
 }
 
+/** Absolute-path token: leading "/", leading "\", or a Windows drive prefix like "C:\" / "C:/". */
+function isAbsoluteLikePath(token: string): boolean {
+  return token.startsWith("/") || token.startsWith("\\") || /^[A-Za-z]:[\\/]/.test(token)
+}
+
 /**
  * Lexical scan of command operands for sensitive path areas (docs/04 built-in
  * exclusions + operator prefixes + guard/OpenCode config dirs). This is NOT a
  * command grammar: tokens are split on whitespace, quotes stripped, components
- * matched whole. It only ever tightens (ask), never authorizes.
+ * matched whole on both "/" and "\" separators (Windows-compatible). It only
+ * ever tightens (ask), never authorizes.
  */
 export function commandTouchesSensitivePath(command: string, prefixes: readonly string[], guardConfigDirs: readonly string[]): boolean {
   for (const rawToken of command.split(/\s+/)) {
     const token = rawToken.replace(/^["']+/, "").replace(/["']+$/, "")
     if (token.length === 0) continue
-    if (token.startsWith("/")) {
+    if (isAbsoluteLikePath(token)) {
+      const normalizedToken = normalizeAbsolutePath(token)
       for (const dir of guardConfigDirs) {
-        if (token === dir || token.startsWith(`${dir}/`)) return true
+        const normalizedDir = normalizeAbsolutePath(dir)
+        if (normalizedToken === normalizedDir || normalizedToken.startsWith(`${normalizedDir}/`)) return true
       }
     }
-    const components = token.split("/").filter((part) => part.length > 0)
+    const components = token.split(/[\\/]/).filter((part) => part.length > 0)
     if (components.some(isSensitiveComponent)) return true
     // Operator prefixes are workspace-relative: they apply to relative operand paths only.
-    if (!token.startsWith("/") && !token.startsWith("~")) {
+    if (!isAbsoluteLikePath(token) && !token.startsWith("~")) {
       const first = components[0] ?? token
       for (const prefix of prefixes) {
         if (first === prefix) return true

@@ -25,9 +25,17 @@ export interface ConfigDeps {
 
 export const KILL_SWITCH_ENV = "OPENCODE_LLM_APPROVAL_DISABLE"
 
+/** Home directory for config resolution: HOME first (Unix), then USERPROFILE (Windows). */
+function homeDirectory(env: Readonly<Record<string, string | undefined>>): string {
+  if (env.HOME && env.HOME.length > 0) return env.HOME
+  if (env.USERPROFILE && env.USERPROFILE.length > 0) return env.USERPROFILE
+  return ""
+}
+
 export function resolveConfigPath(env: Readonly<Record<string, string | undefined>>): string {
-  const base = env.XDG_CONFIG_HOME && env.XDG_CONFIG_HOME.length > 0 ? env.XDG_CONFIG_HOME : `${env.HOME ?? ""}/.config`
-  return `${base.replace(/\/+$/, "")}/opencode-llm-approval/config.json`
+  const home = homeDirectory(env).replace(/[\\/]+$/, "")
+  const base = env.XDG_CONFIG_HOME && env.XDG_CONFIG_HOME.length > 0 ? env.XDG_CONFIG_HOME.replace(/[\\/]+$/, "") : `${home}/.config`
+  return `${base}/opencode-llm-approval/config.json`
 }
 
 let ajvValidate: ((data: unknown) => { ok: boolean; errors: string[] }) | null = null
@@ -44,9 +52,18 @@ function schemaValidator(): (data: unknown) => { ok: boolean; errors: string[] }
   return ajvValidate
 }
 
-/** Lexical path normalization: resolves "." and ".." components without touching the filesystem. */
+/**
+ * Lexical path normalization: resolves "." and ".." components without touching the filesystem.
+ * Both "/" and "\" are separators, so Windows drive paths canonicalize to one form:
+ * "C:\Users\a", "C:/Users/a" and "/C:/Users/a" all normalize to the same value.
+ * Drive-shaped canonical paths are case-folded (D10 re-review R2): Windows
+ * filesystems are case-insensitive, so "c:\Users\A" must match a root written
+ * "C:/Users/a" instead of silently falling to OUTSIDE_SCOPE. POSIX paths keep
+ * their case verbatim — folding them would widen admission on case-sensitive
+ * filesystems.
+ */
 export function normalizeAbsolutePath(path: string): string {
-  const parts = path.split("/")
+  const parts = path.split(/[\\/]/)
   const out: string[] = []
   for (const part of parts) {
     if (part === "" || part === ".") continue
@@ -56,7 +73,9 @@ export function normalizeAbsolutePath(path: string): string {
     }
     out.push(part)
   }
-  return `/${out.join("/")}`
+  const normalized = `/${out.join("/")}`
+  if (/^\/[A-Za-z]:($|\/)/.test(normalized)) return normalized.toLowerCase()
+  return normalized
 }
 
 function isInside(child: string, parent: string): boolean {
@@ -168,15 +187,23 @@ function semanticValidation(config: GuardConfig, deps: ConfigDeps): SemanticFail
   }
   if (containsPlaceholder(audit.directory)) return { message: "audit.directory contains REPLACE_ME placeholder" }
 
-  const home = deps.env.HOME && deps.env.HOME.length > 0 ? normalizeAbsolutePath(deps.env.HOME) : null
+  const homeDir = homeDirectory(deps.env)
+  const home = homeDir.length > 0 ? normalizeAbsolutePath(homeDir) : null
   const configHome = normalizeAbsolutePath(
-    deps.env.XDG_CONFIG_HOME && deps.env.XDG_CONFIG_HOME.length > 0 ? deps.env.XDG_CONFIG_HOME : `${home ?? ""}/.config`,
+    deps.env.XDG_CONFIG_HOME && deps.env.XDG_CONFIG_HOME.length > 0 ? deps.env.XDG_CONFIG_HOME : `${homeDir}/.config`,
   )
 
   const roots = policy.workspaceRoots.map(normalizeAbsolutePath)
   for (let i = 0; i < roots.length; i++) {
     const root = roots[i]!
-    if (root === "/" ) return { message: "workspace root must not be /" }
+    if (root === "/") return { message: "workspace root must not be /" }
+    // Normalized drive root ("C:/" → "/c:"): admitting an entire drive has the
+    // same effect as "/" (D10 review F6) — only the config-dir overlap check
+    // would catch it, and only while config lives on that drive. Note: this
+    // also rejects a literal POSIX directory named "C:" at the filesystem root
+    // — a deliberate, documented ambiguity (re-review R4): drive-shaped roots
+    // are treated as Windows drives everywhere.
+    if (/^\/[A-Za-z]:$/.test(root)) return { message: "workspace root must not be an entire drive" }
     if (root === home) return { message: "workspace root must not be the entire home directory" }
     if (root === configHome || isInside(root, configHome) || isInside(configHome, root)) {
       return { message: "workspace root must not overlap the global configuration directory" }
@@ -253,7 +280,7 @@ export function loadGuardConfig(deps: ConfigDeps): GuardConfigState {
   const path = deps.configPath ?? resolveConfigPath(deps.env)
   const text = deps.readTextFile(path)
   if (text === null) {
-    return { status: "inactive", reason: "CONFIG_INVALID", detail: `config file not found: ${path}` }
+    return { status: "inactive", reason: "CONFIG_MISSING", detail: `config file not found: ${path}` }
   }
   const parsed = parseStrictJson(text)
   if (!parsed.ok) {
@@ -262,6 +289,16 @@ export function loadGuardConfig(deps: ConfigDeps): GuardConfigState {
   const schemaResult = schemaValidator()(parsed.value)
   if (!schemaResult.ok) {
     return { status: "inactive", reason: "CONFIG_INVALID", detail: `config schema violation: ${schemaResult.errors.join("; ")}` }
+  }
+  // Windows operators naturally write workspace-relative prefixes with "\" —
+  // normalize to "/" so they actually match the component scan (D10 review F5).
+  // Validation runs on the normalized values: "a\..\b" becomes "a/../b" and is
+  // rejected by the '..' rule, so normalization can only tighten.
+  const rawPolicy = (parsed.value as { policy?: { alwaysAskPathPrefixes?: unknown } }).policy
+  if (rawPolicy !== undefined && Array.isArray(rawPolicy.alwaysAskPathPrefixes)) {
+    rawPolicy.alwaysAskPathPrefixes = rawPolicy.alwaysAskPathPrefixes.map((prefix: unknown) =>
+      typeof prefix === "string" ? prefix.replace(/\\/g, "/") : prefix,
+    )
   }
   const config = deepFreeze(parsed.value as unknown as GuardConfig)
   const failure = semanticValidation(config, deps)
